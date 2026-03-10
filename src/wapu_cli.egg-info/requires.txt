@@ -1,0 +1,7 @@
+click<9,>=8.1
+requests<3,>=2.31
+tabulate<0.10,>=0.9
+
+[dev]
+pytest<9,>=8.0
+responses<0.26,>=0.25

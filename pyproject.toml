@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wapu-cli"
+version = "0.1.0"
+description = "CLI for interacting with the WapuPay backend"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "click>=8.1,<9",
+  "requests>=2.31,<3",
+  "tabulate>=0.9,<0.10",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+  "responses>=0.25,<0.26",
+]
+
+[project.scripts]
+wapu = "wapu_cli.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

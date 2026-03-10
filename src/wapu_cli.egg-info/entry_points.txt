@@ -1,0 +1,2 @@
+[console_scripts]
+wapu = wapu_cli.cli:main
