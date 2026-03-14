@@ -124,22 +124,30 @@ def auth_login(state: RuntimeState, email: str | None, password: str | None, api
     if not (email and password):
         raise click.ClickException("Provide either --api-key or both --email and --password.")
 
-    payload = WapuClient(state.api_base_url).login(email, password)
-    access_token = payload.get("access_token")
+    login_payload = WapuClient(state.api_base_url).login(email, password)
+    access_token = login_payload.get("access_token")
     if not access_token:
         raise click.ClickException("Login succeeded but the backend did not return an access token.")
 
+    api_token_payload = WapuClient(
+        state.api_base_url,
+        auth=AuthContext(access_token=access_token),
+    ).create_api_token()
+    api_key = api_token_payload.get("token")
+    if not api_key:
+        raise click.ClickException("API token creation succeeded but the backend did not return a token.")
+
     config = state.config_store.load()
     config.api_base_url = state.api_base_url
-    config.auth_type = "jwt"
-    config.access_token = access_token
-    config.api_key = None
+    config.auth_type = "api_key"
+    config.access_token = None
+    config.api_key = api_key
     state.config_store.save(config)
     print_payload(
         state,
         {
-            "message": "Access token stored",
-            "auth_type": "jwt",
+            "message": "API key created and stored",
+            "auth_type": "api_key",
             "api_base_url": config.api_base_url,
             "config_path": str(state.config_path),
         },

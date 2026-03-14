@@ -56,6 +56,34 @@ class ConfigStore:
         return config
 
 
+def load_dotenv(path: Path | None = None) -> dict[str, str]:
+    path = path or (Path.cwd() / ".env")
+    if not path.exists():
+        return {}
+
+    values: dict[str, str] = {}
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            continue
+
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+
+        if value:
+            values[key] = value
+
+    return values
+
+
 def resolve_runtime_config(
     *,
     store: ConfigStore,
@@ -63,12 +91,19 @@ def resolve_runtime_config(
     access_token: str | None = None,
     api_key: str | None = None,
 ) -> dict[str, Any]:
+    dotenv = load_dotenv()
     saved = store.load()
-    resolved_base_url = api_base_url or os.getenv("WAPU_API_BASE_URL") or saved.api_base_url or DEFAULT_API_BASE_URL
+    resolved_base_url = (
+        api_base_url
+        or os.getenv("WAPU_API_BASE_URL")
+        or dotenv.get("WAPU_API_BASE_URL")
+        or saved.api_base_url
+        or DEFAULT_API_BASE_URL
+    )
     env_access_token = os.getenv("WAPU_ACCESS_TOKEN")
     env_api_key = os.getenv("WAPU_API_KEY")
-    resolved_access_token = access_token or env_access_token or saved.access_token
-    resolved_api_key = api_key or env_api_key or saved.api_key
+    resolved_access_token = access_token or env_access_token or dotenv.get("WAPU_ACCESS_TOKEN") or saved.access_token
+    resolved_api_key = api_key or env_api_key or dotenv.get("WAPU_API_KEY") or saved.api_key
 
     if resolved_access_token and resolved_api_key:
         raise ValueError("Provide either an access token or an API key, not both.")

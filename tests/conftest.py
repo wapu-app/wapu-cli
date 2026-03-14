@@ -19,7 +19,12 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-@pytest.fixture()
+@pytest.fixture(autouse=True)
+def isolate_workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture(autouse=True)
 def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "config.json"
     monkeypatch.setattr("wapu_cli.config.CONFIG_PATH", path)

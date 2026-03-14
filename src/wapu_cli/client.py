@@ -23,6 +23,9 @@ class WapuClient:
     def login(self, email: str, password: str) -> dict[str, Any]:
         return self._request("POST", "/users/login", json={"email": email, "password": password})
 
+    def create_api_token(self) -> dict[str, Any]:
+        return self._request("POST", "/users/api-token", json={})
+
     def get_home(self) -> dict[str, Any]:
         return self._request("GET", "/users/home")
 
