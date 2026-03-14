@@ -5,16 +5,15 @@ CLI en Python para interactuar con el backend de WapuPay desde terminal, scripts
 ## Instalación
 
 ```bash
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
+uv venv
+uv sync --dev
 ```
 
 Luego puedes usar:
 
 ```bash
-wapu --help
-python -m wapu_cli --help
+uv run wapu --help
+uv run python -m wapu_cli --help
 ```
 
 ## Configuración
@@ -34,7 +33,7 @@ Variables soportadas:
 Backend de test por default:
 
 ```text
-https://miasmal-isodose-zenobia.ngrok-free.dev
+https://be-stage.wapu.app
 ```
 
 ## Auth
@@ -42,25 +41,25 @@ https://miasmal-isodose-zenobia.ngrok-free.dev
 Guardar una API key:
 
 ```bash
-wapu auth login --api-key '...'
+uv run wapu auth login --api-key '...'
 ```
 
 Guardar un JWT:
 
 ```bash
-wapu auth login --email you@example.com --password '...'
+uv run wapu auth login --email you@example.com --password '...'
 ```
 
 Ver estado local:
 
 ```bash
-wapu auth status
+uv run wapu auth status
 ```
 
 Borrar credenciales:
 
 ```bash
-wapu auth logout
+uv run wapu auth logout
 ```
 
 ## Comandos MVP
@@ -68,32 +67,32 @@ wapu auth logout
 Balance:
 
 ```bash
-wapu balance
+uv run wapu balance
 ```
 
 Crear depósito Lightning:
 
 ```bash
-wapu deposit lightning create --amount 10 --currency SAT
+uv run wapu deposit lightning create --amount 10 --currency SAT
 ```
 
 Listar transacciones:
 
 ```bash
-wapu tx list
+uv run wapu tx list
 ```
 
 Obtener una transacción:
 
 ```bash
-wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
+uv run wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
 ```
 
 Crear retiro ARS:
 
 ```bash
-wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
-wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
+uv run wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
+uv run wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
 ```
 
 ## Salida
@@ -101,18 +100,28 @@ wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
 Formatos:
 
 ```bash
-wapu --output json balance
-wapu --output table tx list
+uv run wapu --output json balance
+uv run wapu --output table tx list
 ```
 
 Modo silencioso:
 
 ```bash
-wapu --quiet balance
+uv run wapu --quiet balance
 ```
 
 ## Tests
 
 ```bash
-pytest
+uv run pytest
 ```
+
+## Smoke Test Manual
+
+Para correr un smoke test real del CLI contra stage usando comandos `uv run wapu ...`, usa:
+
+```bash
+uv run python scripts/smoke_test_cli.py
+```
+
+La guía completa y las variables de entorno soportadas están en [docs/smoke-test-cli.md](/Users/andychapo/Projects/wapu/wapu-cli/docs/smoke-test-cli.md).
