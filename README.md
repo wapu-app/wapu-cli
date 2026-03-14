@@ -1,91 +1,127 @@
-# ⚡ Wapu  CLI
+# Wapu CLI
 
-CLI oficial (beta) para interactuar con la API de WapuPay y habilitar flujos **off-ramp de BTC y USDT a ARS** de forma programable.
+CLI en Python para interactuar con el backend de WapuPay desde terminal, scripts y agentes.
 
-> Objetivo: dar a developers, Bitcoiners, emprendedores y agentes de IA una herramienta simple para mover valor entre Bitcoin y pesos argentinos.
+## Instalación
 
----
+```bash
+uv venv
+uv sync --dev
+```
 
-## 🚀 ¿Qué es `wapu-cli`?
+Luego puedes usar:
 
-`wapu-cli` es una herramienta de línea de comandos para operar sobre WapuPay sin depender de frontend.
+```bash
+uv run wapu --help
+uv run python -m wapu_cli --help
+```
 
-Permite:
-- pruebas rápidas de producto
-- automatización con scripts
-- integración server-to-server
-- ejecución por agentes de IA (ej. OpenClaw)
+## Configuración
 
----
+Precedencia de configuración:
 
-## 🧪 Funcionalidades base (Beta)
+1. flags del comando
+2. variables de entorno
+3. credenciales guardadas en `~/.config/wapu-cli/config.json`
 
-En esta versión inicial, el foco está en operaciones concretas de tesorería y pagos:
+Variables soportadas:
 
-1. ⚡ **Depósitos vía Lightning**
-   - Crear depósitos por Lightning Network.
-   - Caso de uso: convertir cobros BTC en flujo operativo.
+- `WAPU_API_BASE_URL`
+- `WAPU_ACCESS_TOKEN`
+- `WAPU_API_KEY`
 
-2. 💸 **Envío de FIAT (ARS) sin necesidad de KYC**
-   - Solicitar transferencias en pesos argentinos vía alias/CBU.
-   - Ideal para payout a comercios o proveedores locales.
+Backend de test por default:
 
-3. 📜 **Listado de transacciones**
-   - Ver historial para auditoría, conciliación y debugging.
+```text
+https://be-stage.wapu.app
+```
 
-4. 🔎 **Status de transacciones**
-   - Consultar una transacción puntual por ID.
+## Auth
 
-5. 🧾 **Ver balance**
-   - Consultar balance actual desde API.
+Guardar una API key:
 
-6. 🪙 **Solicitar retiro de USDT**
-   - Iniciar retiro de saldo USDT desde el CLI.
+```bash
+uv run wapu auth login --api-key '...'
+```
 
----
+Guardar un JWT:
 
-## ✅ ¿Por qué esto le sirve a un developer?
+```bash
+uv run wapu auth login --email you@example.com --password '...'
+```
 
-### Integración para productos Bitcoin-first
-- Un developer que construye un **POS Lightning para comercios** puede hacer que:
-  - el comercio cobre en BTC,
-  - y al final del día se retire automáticamente a ARS,
-  - sin que el comerciante se preocupe por la operatoria.
+Ver estado local:
 
-### Listo para AI agents
-- Un agente tipo OpenClaw puede ejecutar pagos en pesos con instrucciones de alto nivel, por ejemplo:
-  - “programá el pago de la cuota mensual del gimnasio”
-  - “enviá ARS a este alias cuando entre un cobro en BTC”
+```bash
+uv run wapu auth status
+```
 
-### Menos fricción, más shipping
-- Puede validar flujos de pagos **antes** de construir frontend.
-- Puede correr pruebas desde terminal o CI sin UI.
+Borrar credenciales:
 
-### Automatización real
-- Con scripts (`cron`, jobs, workers), puede programar tareas operativas:
-  - conciliaciones
-  - payouts periódicos
-  - alertas por estado de transacción
+```bash
+uv run wapu auth logout
+```
 
----
+## Comandos MVP
 
-## 🌎 Visión
+Balance:
 
-- rampa de salida a FIAT desde BTC/USDT
-- onboarding más simple para comercios
-- operación programable por humanos y agentes
-- soporte para economías nativas de internet
+```bash
+uv run wapu balance
+```
 
-En una frase: **cobrar en Bitcoin y operar en ARS sin fricción**.
+Crear depósito Lightning:
 
----
+```bash
+uv run wapu deposit lightning create --amount 10 --currency SAT
+```
 
-## 📌 Estado del proyecto
+Listar transacciones:
 
-- **Estado:** Beta 
-- **Nombre del repo:** `wapu-cli`
-- **Enfoque actual:** DX, automatización y casos server-to-server
+```bash
+uv run wapu tx list
+```
 
----
+Obtener una transacción:
 
-Hecho con foco en builders que quieren integrar pagos reales, no demos. 🔧
+```bash
+uv run wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
+```
+
+Crear retiro ARS:
+
+```bash
+uv run wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
+uv run wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
+```
+
+## Salida
+
+Formatos:
+
+```bash
+uv run wapu --output json balance
+uv run wapu --output table tx list
+```
+
+Modo silencioso:
+
+```bash
+uv run wapu --quiet balance
+```
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+## Smoke Test Manual
+
+Para correr un smoke test real del CLI contra stage usando comandos `uv run wapu ...`, usa:
+
+```bash
+uv run python scripts/smoke_test_cli.py
+```
+
+La guía completa y las variables de entorno soportadas están en [docs/smoke-test-cli.md](/Users/andychapo/Projects/wapu/wapu-cli/docs/smoke-test-cli.md).
