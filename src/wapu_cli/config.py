@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-DEFAULT_API_BASE_URL = "https://miasmal-isodose-zenobia.ngrok-free.dev"
+DEFAULT_API_BASE_URL = "https://be-stage.wapu.app"
 CONFIG_DIR = Path.home() / ".config" / "wapu-cli"
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
