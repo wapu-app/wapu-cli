@@ -1,0 +1,1 @@
+"""Wapu CLI package."""
