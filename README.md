@@ -33,7 +33,7 @@ Variables soportadas:
 Backend de test por default:
 
 ```text
-https://be-stage.wapu.app
+https://be-prod.wapu.app
 ```
 
 ## Auth
