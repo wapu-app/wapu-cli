@@ -36,6 +36,12 @@ uv run wapu --help
 uv run python -m wapu_cli --help
 ```
 
+Cuando esté publicado en PyPI, también podrás ejecutarlo directamente con:
+
+```bash
+uvx wapu --help
+```
+
 ## Configuración
 
 Precedencia de configuración:
