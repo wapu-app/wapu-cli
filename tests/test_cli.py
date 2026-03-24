@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import responses
+import yaml
 
 from wapu_cli.cli import _preview_secret, cli
 from wapu_cli.config import ConfigData, DEFAULT_API_BASE_URL
@@ -108,6 +109,63 @@ def test_auth_status_reflects_saved_state(runner, config_store):
     payload = json.loads(result.output)
     assert payload["authenticated"] is True
     assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_json_shortcut(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--json", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_yaml_shortcut(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--yaml", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = yaml.safe_load(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_output_yaml(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--output", "yaml", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = yaml.safe_load(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_defaults_to_user_friendly_output(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["auth", "status"])
+
+    assert result.exit_code == 0
+    assert "authenticated" in result.output
+    assert "api_key" in result.output
+
+
+def test_output_selectors_are_mutually_exclusive_with_output_and_yaml(runner):
+    result = runner.invoke(cli, ["--output", "json", "--yaml", "auth", "status"])
+
+    assert result.exit_code != 0
+    assert "Use only one output selector" in result.output
+
+
+def test_output_selectors_are_mutually_exclusive_between_json_and_yaml(runner):
+    result = runner.invoke(cli, ["--json", "--yaml", "auth", "status"])
+
+    assert result.exit_code != 0
+    assert "Use only one output selector" in result.output
 
 
 def test_auth_status_reports_jwt_preview(runner, config_store):

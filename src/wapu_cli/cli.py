@@ -36,7 +36,9 @@ def main() -> None:
 
 
 @click.group()
-@click.option("--output", "output_format", type=click.Choice(["json", "table"]), default="table", show_default=True)
+@click.option("--output", "output_format", type=click.Choice(["json", "table", "yaml"]), default=None)
+@click.option("--json", "json_output", is_flag=True, help="Render structured output as JSON.")
+@click.option("--yaml", "yaml_output", is_flag=True, help="Render structured output as YAML.")
 @click.option("--quiet", is_flag=True, help="Suppress non-data output and rely on exit codes.")
 @click.option("--api-base-url", help="Override the backend base URL.")
 @click.option("--access-token", help="Use a JWT access token for this invocation.")
@@ -45,12 +47,19 @@ def main() -> None:
 def cli(
     ctx: click.Context,
     output_format: str,
+    json_output: bool,
+    yaml_output: bool,
     quiet: bool,
     api_base_url: str | None,
     access_token: str | None,
     api_key: str | None,
 ) -> None:
     """CLI for interacting with the WapuPay backend."""
+    resolved_output = resolve_output_format(
+        output_format=output_format,
+        json_output=json_output,
+        yaml_output=yaml_output,
+    )
     store = ConfigStore()
     try:
         resolved = resolve_runtime_config(
@@ -63,7 +72,7 @@ def cli(
         raise click.ClickException(str(exc)) from exc
 
     ctx.obj = RuntimeState(
-        output=output_format,
+        output=resolved_output,
         quiet=quiet,
         config_store=store,
         config_path=CONFIG_PATH,
@@ -73,6 +82,20 @@ def cli(
         auth_type=resolved["auth_type"],
         stored_auth_type=resolved["stored_auth_type"],
     )
+
+
+def resolve_output_format(*, output_format: str | None, json_output: bool, yaml_output: bool) -> str:
+    if output_format and (json_output or yaml_output):
+        raise click.ClickException("Use only one output selector: --output, --json, or --yaml.")
+    if json_output and yaml_output:
+        raise click.ClickException("Use only one output selector: --output, --json, or --yaml.")
+    if json_output:
+        return "json"
+    if yaml_output:
+        return "yaml"
+    if output_format:
+        return output_format
+    return "table"
 
 
 def require_auth(state: RuntimeState) -> None:

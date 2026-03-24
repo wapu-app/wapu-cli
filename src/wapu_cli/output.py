@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import yaml
 from tabulate import tabulate
 
 
 def emit_output(payload: Any, *, output_format: str) -> str:
     if output_format == "json":
         return json.dumps(payload, indent=2, sort_keys=True)
+    if output_format == "yaml":
+        return yaml.safe_dump(payload, sort_keys=True, allow_unicode=True).rstrip()
     return render_table(payload)
 
 

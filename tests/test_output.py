@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import yaml
+
 from wapu_cli.output import _flatten_row, emit_output, render_table
 
 
@@ -15,6 +17,18 @@ def test_emit_output_table_uses_table_renderer():
     rendered = emit_output("ok", output_format="table")
 
     assert rendered == "ok"
+
+
+def test_emit_output_yaml_mapping_sorts_keys():
+    rendered = emit_output({"b": 2, "a": 1}, output_format="yaml")
+
+    assert rendered == "a: 1\nb: 2"
+
+
+def test_emit_output_yaml_list():
+    rendered = emit_output([{"name": "alice"}, {"name": "bob"}], output_format="yaml")
+
+    assert yaml.safe_load(rendered) == [{"name": "alice"}, {"name": "bob"}]
 
 
 def test_render_table_handles_empty_list():

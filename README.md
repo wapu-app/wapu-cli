@@ -126,7 +126,10 @@ uv run wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 1
 Formatos:
 
 ```bash
+uv run wapu --json balance
+uv run wapu --yaml balance
 uv run wapu --output json balance
+uv run wapu --output yaml balance
 uv run wapu --output table tx list
 ```
 
