@@ -225,6 +225,15 @@ def deposit_lightning_create(state: RuntimeState, amount: float, currency: str) 
     print_payload(state, payload)
 
 
+@deposit_lightning.command("address")
+@click.pass_obj
+def deposit_lightning_address(state: RuntimeState) -> None:
+    """Show the user's Lightning address."""
+    require_auth(state)
+    payload = state.client.get_lightning_address()
+    print_payload(state, payload)
+
+
 @cli.group("tx")
 def tx_group() -> None:
     """Inspect transactions."""

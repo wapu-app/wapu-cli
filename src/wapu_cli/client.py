@@ -29,6 +29,13 @@ class WapuClient:
     def get_home(self) -> dict[str, Any]:
         return self._request("GET", "/users/home")
 
+    def get_lightning_address(self) -> dict[str, Any]:
+        payload = self.get_home()
+        username = payload.get("username")
+        if not isinstance(username, str) or not username.strip():
+            raise WapuCLIError("Backend did not return a username for the lightning address.", exit_code=1)
+        return {"lightning_address": f"{username.strip().lower()}@wapu.app"}
+
     def create_lightning_deposit(self, amount: float, currency: str) -> dict[str, Any]:
         return self._request("POST", "/wallet/deposit_lightning", json={"amount": amount, "currency": currency})
 

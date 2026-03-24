@@ -62,6 +62,27 @@ def test_request_rejects_invalid_json_response():
     assert exc_info.value.exit_code == 1
 
 
+@responses.activate
+def test_get_lightning_address_normalizes_username():
+    responses.add(responses.GET, "https://api.example/users/home", json={"username": " ExampleUser123 "}, status=200)
+
+    client = WapuClient("https://api.example")
+
+    assert client.get_lightning_address() == {"lightning_address": "exampleuser123@wapu.app"}
+
+
+@responses.activate
+def test_get_lightning_address_requires_username():
+    responses.add(responses.GET, "https://api.example/users/home", json={}, status=200)
+
+    client = WapuClient("https://api.example")
+
+    with pytest.raises(WapuCLIError, match="did not return a username") as exc_info:
+        client.get_lightning_address()
+
+    assert exc_info.value.exit_code == 1
+
+
 @pytest.mark.parametrize(
     ("status_code", "expected_exit_code"),
     [(400, 2), (404, 2), (401, 3), (403, 3), (429, 4), (500, 1)],

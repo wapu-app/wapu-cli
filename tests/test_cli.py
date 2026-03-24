@@ -203,6 +203,46 @@ def test_deposit_lightning_create_calls_endpoint(runner, config_store):
 
 
 @responses.activate
+def test_deposit_lightning_address_returns_normalized_address(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/home",
+        json={"username": " ExampleUser123 "},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "deposit", "lightning", "address"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["lightning_address"] == "exampleuser123@wapu.app"
+
+
+def test_deposit_lightning_address_requires_authentication(runner):
+    result = runner.invoke(cli, ["deposit", "lightning", "address"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_deposit_lightning_address_requires_username(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/home",
+        json={"username": "   "},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["deposit", "lightning", "address"])
+
+    assert result.exit_code == 1
+    assert "did not return a username" in result.output
+
+
+@responses.activate
 def test_tx_list_returns_transactions(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
