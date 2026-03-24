@@ -11,6 +11,12 @@ def test_emit_output_json_sorts_keys():
     assert rendered == '{\n  "a": 1,\n  "b": 2\n}'
 
 
+def test_emit_output_table_uses_table_renderer():
+    rendered = emit_output("ok", output_format="table")
+
+    assert rendered == "ok"
+
+
 def test_render_table_handles_empty_list():
     assert render_table([]) == "No results."
 
@@ -19,10 +25,37 @@ def test_render_table_handles_scalar_list():
     assert render_table(["one", "two"]) == "one\ntwo"
 
 
+def test_render_table_handles_scalar_payload():
+    assert render_table(123) == "123"
+
+
 def test_render_table_handles_transactions_list_payload():
     rendered = render_table({"transactions": []})
 
     assert rendered == "No transactions found."
+
+
+def test_render_table_handles_non_empty_transactions_payload():
+    rendered = render_table(
+        {
+            "transactions": [
+                {
+                    "transaction_id": "tx-1",
+                    "type": "deposit",
+                    "status": "Pending",
+                    "payment_amount": "10",
+                    "payment_currency": "SAT",
+                    "alias": "user.alias",
+                    "created_at": "2026-03-24T10:00:00Z",
+                }
+            ]
+        }
+    )
+
+    assert "transaction_id" in rendered
+    assert "tx-1" in rendered
+    assert "deposit" in rendered
+    assert "SAT" in rendered
 
 
 def test_render_table_handles_mapping_with_nested_values():

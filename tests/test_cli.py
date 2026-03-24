@@ -56,6 +56,13 @@ def test_auth_login_rejects_mixed_api_key_and_user_password(runner):
     assert "Use either --api-key or --email/--password, not both." in result.output
 
 
+def test_auth_login_requires_credentials_input(runner):
+    result = runner.invoke(cli, ["auth", "login"])
+
+    assert result.exit_code != 0
+    assert "Provide either --api-key or both --email and --password." in result.output
+
+
 @responses.activate
 def test_auth_login_requires_access_token_in_login_response(runner):
     responses.add(
