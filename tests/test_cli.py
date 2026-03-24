@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 
 import responses
+import yaml
 
-from wapu_cli.cli import cli
+from wapu_cli.cli import _preview_secret, cli
 from wapu_cli.config import ConfigData, DEFAULT_API_BASE_URL
 
 
@@ -46,6 +47,59 @@ def test_auth_login_with_api_key_stores_key(runner, config_path):
     assert data["api_key"] == "key-123"
 
 
+def test_auth_login_rejects_mixed_api_key_and_user_password(runner):
+    result = runner.invoke(
+        cli,
+        ["auth", "login", "--api-key", "key-123", "--email", "user@example.com", "--password", "secret"],
+    )
+
+    assert result.exit_code != 0
+    assert "Use either --api-key or --email/--password, not both." in result.output
+
+
+def test_auth_login_requires_credentials_input(runner):
+    result = runner.invoke(cli, ["auth", "login"])
+
+    assert result.exit_code != 0
+    assert "Provide either --api-key or both --email and --password." in result.output
+
+
+@responses.activate
+def test_auth_login_requires_access_token_in_login_response(runner):
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/login",
+        json={"message": "ok"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["auth", "login", "--email", "user@example.com", "--password", "secret"])
+
+    assert result.exit_code != 0
+    assert "did not return an access token" in result.output
+
+
+@responses.activate
+def test_auth_login_requires_api_token_in_second_response(runner):
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/login",
+        json={"access_token": "jwt-token-123456"},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/api-token",
+        json={"message": "created"},
+        status=201,
+    )
+
+    result = runner.invoke(cli, ["auth", "login", "--email", "user@example.com", "--password", "secret"])
+
+    assert result.exit_code != 0
+    assert "did not return a token" in result.output
+
+
 def test_auth_status_reflects_saved_state(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
 
@@ -55,6 +109,85 @@ def test_auth_status_reflects_saved_state(runner, config_store):
     payload = json.loads(result.output)
     assert payload["authenticated"] is True
     assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_json_shortcut(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--json", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_yaml_shortcut(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--yaml", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = yaml.safe_load(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_supports_output_yaml(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["--output", "yaml", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = yaml.safe_load(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "api_key"
+
+
+def test_auth_status_defaults_to_user_friendly_output(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-abcxyz"))
+
+    result = runner.invoke(cli, ["auth", "status"])
+
+    assert result.exit_code == 0
+    assert "authenticated" in result.output
+    assert "api_key" in result.output
+
+
+def test_output_selectors_are_mutually_exclusive_with_output_and_yaml(runner):
+    result = runner.invoke(cli, ["--output", "json", "--yaml", "auth", "status"])
+
+    assert result.exit_code != 0
+    assert "Use only one output selector" in result.output
+
+
+def test_output_selectors_are_mutually_exclusive_between_json_and_yaml(runner):
+    result = runner.invoke(cli, ["--json", "--yaml", "auth", "status"])
+
+    assert result.exit_code != 0
+    assert "Use only one output selector" in result.output
+
+
+def test_auth_status_reports_jwt_preview(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="jwt", access_token="jwt-token-1234"))
+
+    result = runner.invoke(cli, ["--output", "json", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["authenticated"] is True
+    assert payload["auth_type"] == "jwt"
+    assert payload["token_preview"] == "jwt-...1234"
+
+
+def test_auth_status_reports_unauthenticated_when_no_credentials(runner):
+    result = runner.invoke(cli, ["--output", "json", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["authenticated"] is False
+    assert payload["auth_type"] is None
+    assert "token_preview" not in payload
 
 
 def test_auth_logout_clears_credentials(runner, config_store, config_path):
@@ -86,6 +219,29 @@ def test_balance_uses_users_home(runner, config_store):
     assert responses.calls[0].request.headers["X-API-Key"] == "key-123"
 
 
+def test_balance_requires_authentication(runner):
+    result = runner.invoke(cli, ["balance"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_quiet_suppresses_success_output(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/home",
+        json={"combined_balance": 97258.85, "combined_balance_currency": "ARS"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--quiet", "balance"])
+
+    assert result.exit_code == 0
+    assert result.output == ""
+
+
 @responses.activate
 def test_deposit_lightning_create_calls_endpoint(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
@@ -102,6 +258,46 @@ def test_deposit_lightning_create_calls_endpoint(runner, config_store):
     payload = json.loads(result.output)
     assert payload["transaction_id"] == "tx-1"
     assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {"amount": 10.0, "currency": "SAT"}
+
+
+@responses.activate
+def test_deposit_lightning_address_returns_normalized_address(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/home",
+        json={"username": " ExampleUser123 "},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "deposit", "lightning", "address"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["lightning_address"] == "exampleuser123@wapu.app"
+
+
+def test_deposit_lightning_address_requires_authentication(runner):
+    result = runner.invoke(cli, ["deposit", "lightning", "address"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_deposit_lightning_address_requires_username(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/home",
+        json={"username": "   "},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["deposit", "lightning", "address"])
+
+    assert result.exit_code == 1
+    assert "did not return a username" in result.output
 
 
 @responses.activate
@@ -241,6 +437,21 @@ def test_shell_env_overrides_dotenv_file(runner, monkeypatch, tmp_path):
     assert payload["token_preview"] == "shel...-key"
 
 
+def test_api_base_url_flag_overrides_other_sources(runner, config_store, monkeypatch, tmp_path):
+    config_store.save(ConfigData(api_base_url="https://saved.example", auth_type="api_key", api_key="saved-key"))
+    env_dir = tmp_path / "project"
+    env_dir.mkdir()
+    (env_dir / ".env").write_text("WAPU_API_BASE_URL=https://dotenv.example\n", encoding="utf-8")
+    monkeypatch.chdir(env_dir)
+    monkeypatch.setenv("WAPU_API_BASE_URL", "https://shell.example")
+
+    result = runner.invoke(cli, ["--output", "json", "--api-base-url", "https://flag.example/", "auth", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["api_base_url"] == "https://flag.example"
+
+
 @responses.activate
 def test_unauthorized_error_has_non_zero_exit_code(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="bad-key"))
@@ -255,3 +466,9 @@ def test_unauthorized_error_has_non_zero_exit_code(runner, config_store):
 
     assert result.exit_code == 3
     assert "Unauthorized" in result.output
+
+
+def test_preview_secret_handles_empty_short_and_long_values():
+    assert _preview_secret(None) is None
+    assert _preview_secret("short") == "short"
+    assert _preview_secret("abcdefghijkl") == "abcd...ijkl"
