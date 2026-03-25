@@ -24,6 +24,28 @@ La apuesta del proyecto está en ofrecer una interfaz simple y programable sobre
 
 ## Instalación
 
+Instalación recomendada para uso normal:
+
+```bash
+uv tool install wapu
+```
+
+Luego puedes usar directamente:
+
+```bash
+wapu --help
+```
+
+También puedes correrlo de forma efímera sin instalarlo globalmente:
+
+```bash
+uvx wapu --help
+```
+
+## Desarrollo local
+
+Si quieres clonar el repositorio y trabajar sobre el código:
+
 ```bash
 uv venv
 uv sync --dev
@@ -34,12 +56,6 @@ Luego puedes usar:
 ```bash
 uv run wapu --help
 uv run python -m wapu_cli --help
-```
-
-Cuando esté publicado en PyPI, también podrás ejecutarlo directamente con:
-
-```bash
-uvx wapu --help
 ```
 
 ## Configuración
@@ -67,25 +83,25 @@ https://be-prod.wapu.app
 Guardar una API key:
 
 ```bash
-uv run wapu auth login --api-key '...'
+wapu auth login --api-key '...'
 ```
 
 Guardar un JWT:
 
 ```bash
-uv run wapu auth login --email you@example.com --password '...'
+wapu auth login --email you@example.com --password '...'
 ```
 
 Ver estado local:
 
 ```bash
-uv run wapu auth status
+wapu auth status
 ```
 
 Borrar credenciales:
 
 ```bash
-uv run wapu auth logout
+wapu auth logout
 ```
 
 ## Comandos MVP
@@ -93,38 +109,38 @@ uv run wapu auth logout
 Balance:
 
 ```bash
-uv run wapu balance
+wapu balance
 ```
 
 Crear depósito Lightning:
 
 ```bash
-uv run wapu deposit lightning create --amount 10 --currency SAT
+wapu deposit lightning create --amount 10 --currency SAT
 ```
 
 Obtener la Lightning address:
 
 ```bash
-uv run wapu deposit lightning address
+wapu deposit lightning address
 ```
 
 Listar transacciones:
 
 ```bash
-uv run wapu tx list
+wapu tx list
 ```
 
 Obtener una transacción:
 
 ```bash
-uv run wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
+wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
 ```
 
 Crear retiro ARS:
 
 ```bash
-uv run wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
-uv run wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
+wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
+wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
 ```
 
 ## Salida
@@ -132,17 +148,17 @@ uv run wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 1
 Formatos:
 
 ```bash
-uv run wapu --json balance
-uv run wapu --yaml balance
-uv run wapu --output json balance
-uv run wapu --output yaml balance
-uv run wapu --output table tx list
+wapu --json balance
+wapu --yaml balance
+wapu --output json balance
+wapu --output yaml balance
+wapu --output table tx list
 ```
 
 Modo silencioso:
 
 ```bash
-uv run wapu --quiet balance
+wapu --quiet balance
 ```
 
 ## Tests
