@@ -72,6 +72,32 @@ def test_render_table_handles_non_empty_transactions_payload():
     assert "SAT" in rendered
 
 
+def test_render_table_handles_contacts_payload():
+    rendered = render_table(
+        {
+            "contacts": [
+                {
+                    "id": 1,
+                    "name_label": "Jane Doe",
+                    "bank_alias": "alias.test.cbu",
+                    "wallet_address": None,
+                    "network": None,
+                    "is_favourite": True,
+                    "updated_at": "2026-03-29 12:00:00",
+                }
+            ]
+        }
+    )
+
+    assert "name_label" in rendered
+    assert "Jane Doe" in rendered
+    assert "alias.test.cbu" in rendered
+
+
+def test_render_table_handles_empty_contacts_payload():
+    assert render_table({"contacts": []}) == "No contacts found."
+
+
 def test_render_table_handles_mapping_with_nested_values():
     rendered = render_table({"name": "alice", "meta": {"active": True}, "tags": ["vip"]})
 

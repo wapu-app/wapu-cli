@@ -99,7 +99,7 @@ Borrar credenciales:
 wapu auth logout
 ```
 
-## Comandos MVP
+## Comandos
 
 Balance:
 
@@ -111,6 +111,12 @@ Crear depósito Lightning:
 
 ```bash
 wapu deposit lightning create --amount 10 --currency SAT
+```
+
+Crear depósito on-chain:
+
+```bash
+wapu deposit crypto --amount 100 --currency USDT --network POLYGON
 ```
 
 Obtener la Lightning address:
@@ -131,11 +137,62 @@ Obtener una transacción:
 wapu tx get 2b753493-687b-431f-8d85-f9b4cb99199e
 ```
 
+Cancelar una transacción:
+
+```bash
+wapu tx cancel 2b753493-687b-431f-8d85-f9b4cb99199e
+```
+
+Cotizar monto tentativo:
+
+```bash
+wapu tx tentative-amount --amount 10000 --currency-payment ARS --currency-taken USDT --type fiat_transfer
+```
+
+Transferencia interna:
+
+```bash
+wapu tx inner-transfer --amount 10 --currency USDT --receiver-username johndoe
+```
+
 Crear retiro ARS:
 
 ```bash
 wapu withdraw ars --type fiat_transfer --alias test.alias --amount 100 --receiver-name 'Test Receiver'
 wapu withdraw ars --type fast_fiat_transfer --alias test.alias --amount 100
+```
+
+Crear retiro crypto:
+
+```bash
+wapu withdraw crypto --address TCZ7Gm6gmZhAFLLZWT12XwNLRwaWaxcVqA --network TRON --currency USDT --amount 25 --receiver-name 'Jane Doe'
+```
+
+Contactos:
+
+```bash
+wapu contacts list
+wapu contacts list --filter-type favourite
+wapu contacts favourite 1 --value true
+wapu contacts delete 1
+```
+
+API token:
+
+```bash
+wapu api-token status
+```
+
+Usuario:
+
+```bash
+wapu user spending-limit
+wapu user referral
+wapu user referral --email friend@example.com --phone 5491155556666
+wapu user profile get
+wapu user profile update --username newusername --telegram my_telegram_handle
+wapu user settings get
+wapu user settings update --language ES --beta-version --favourite-currency ARS
 ```
 
 ## Salida

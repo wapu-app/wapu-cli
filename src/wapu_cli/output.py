@@ -21,6 +21,8 @@ def render_table(payload: Any) -> str:
     if isinstance(payload, dict):
         if "transactions" in payload and isinstance(payload["transactions"], list):
             return _render_transactions(payload["transactions"])
+        if "contacts" in payload and isinstance(payload["contacts"], list):
+            return _render_contacts(payload["contacts"])
         return _render_mapping(payload)
     return str(payload)
 
@@ -53,6 +55,25 @@ def _render_transactions(transactions: list[dict[str, Any]]) -> str:
                 "payment_currency": tx.get("payment_currency"),
                 "alias": tx.get("alias"),
                 "created_at": tx.get("created_at"),
+            }
+        )
+    return tabulate(rows, headers="keys", tablefmt="github")
+
+
+def _render_contacts(contacts: list[dict[str, Any]]) -> str:
+    if not contacts:
+        return "No contacts found."
+    rows = []
+    for contact in contacts:
+        rows.append(
+            {
+                "id": contact.get("id"),
+                "name_label": contact.get("name_label"),
+                "bank_alias": contact.get("bank_alias"),
+                "wallet_address": contact.get("wallet_address"),
+                "network": contact.get("network"),
+                "is_favourite": contact.get("is_favourite"),
+                "updated_at": contact.get("updated_at"),
             }
         )
     return tabulate(rows, headers="keys", tablefmt="github")

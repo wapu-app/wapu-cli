@@ -468,6 +468,429 @@ def test_unauthorized_error_has_non_zero_exit_code(runner, config_store):
     assert "Unauthorized" in result.output
 
 
+@responses.activate
+def test_api_token_status_calls_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/api-token/status",
+        json={"has_token": True, "is_active": True, "token_prefix": "key-pref"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "api-token", "status"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["has_token"] is True
+
+
+@responses.activate
+def test_contacts_list_returns_contacts(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/contacts",
+        json={"contacts": [{"id": 1, "name_label": "Jane Doe", "is_favourite": True}]},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "contacts", "list"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["contacts"][0]["id"] == 1
+
+
+@responses.activate
+def test_contacts_list_supports_filter_type(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/contacts",
+        json={"contacts": []},
+        status=200,
+        match=[responses.matchers.query_param_matcher({"filter_type": "favourite"})],
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "contacts", "list", "--filter-type", "favourite"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output) == {"contacts": []}
+
+
+@responses.activate
+def test_contacts_favourite_uses_form_data(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/contacts/is_favourite",
+        json={"id": 1, "is_favourite": True},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "contacts", "favourite", "1", "--value", "true"])
+
+    assert result.exit_code == 0
+    body = responses.calls[0].request.body
+    decoded = body if isinstance(body, str) else body.decode("utf-8")
+    assert "contact_id=1" in decoded
+    assert "is_favourite=true" in decoded
+
+
+@responses.activate
+def test_contacts_delete_calls_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.DELETE,
+        f"{DEFAULT_API_BASE_URL}/contacts/1",
+        json={"message": "The contact has been deleted."},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "contacts", "delete", "1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert "deleted" in payload["message"]
+
+
+@responses.activate
+def test_contacts_delete_handles_not_found(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.DELETE,
+        f"{DEFAULT_API_BASE_URL}/contacts/999",
+        json={"error": "Contact not found"},
+        status=404,
+    )
+
+    result = runner.invoke(cli, ["contacts", "delete", "999"])
+
+    assert result.exit_code == 2
+    assert "Contact not found" in result.output
+
+
+@responses.activate
+def test_tx_cancel_uses_patch_form_data(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.PATCH,
+        f"{DEFAULT_API_BASE_URL}/transactions/tx-1",
+        json={"transaction_id": "tx-1", "status": "CANCELED"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "tx", "cancel", "tx-1"])
+
+    assert result.exit_code == 0
+    body = responses.calls[0].request.body
+    decoded = body if isinstance(body, str) else body.decode("utf-8")
+    assert "status=CANCELED" in decoded
+
+
+@responses.activate
+def test_tx_tentative_amount_uses_json_body(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/tentative-amount",
+        json={"usdt_amount": 6.99, "fee": 0.14, "total_amount": 7.13, "exchange_rate": 1432.5},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "tentative-amount",
+            "--amount",
+            "10000",
+            "--currency-payment",
+            "ARS",
+            "--currency-taken",
+            "USDT",
+            "--type",
+            "fiat_transfer",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "amount": 10000.0,
+        "currency_payment": "ARS",
+        "currency_taken": "USDT",
+        "type": "fiat_transfer",
+    }
+
+
+@responses.activate
+def test_tx_inner_transfer_uses_form_data(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/inner_transfer",
+        json={"transaction_id": "tx-inner-1", "status": "Pending"},
+        status=201,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "inner-transfer",
+            "--amount",
+            "10",
+            "--currency",
+            "USDT",
+            "--receiver-username",
+            "janedoe",
+        ],
+    )
+
+    assert result.exit_code == 0
+    body = responses.calls[0].request.body
+    decoded = body if isinstance(body, str) else body.decode("utf-8")
+    assert "amount=10.0" in decoded
+    assert "currency=USDT" in decoded
+    assert "receiver_username=janedoe" in decoded
+
+
+@responses.activate
+def test_user_spending_limit_calls_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/spending_limit",
+        json={"kyc_tier": 1, "current_limit": 500, "spended": 123.45, "available": 376.55},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "spending-limit"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["available"] == 376.55
+
+
+@responses.activate
+def test_user_referral_supports_empty_body(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/referral",
+        json={"referral_link": "https://wapu.app/signup?ref=ABC123", "referral_code": "ABC123"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "referral"])
+
+    assert result.exit_code == 0
+    assert responses.calls[0].request.body is None
+
+
+@responses.activate
+def test_user_referral_supports_optional_payload(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/referral",
+        json={"referral_code": "ABC123"},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        ["--output", "json", "user", "referral", "--email", "friend@example.com", "--phone", "5491155556666"],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "email": "friend@example.com",
+        "phone": "5491155556666",
+    }
+
+
+@responses.activate
+def test_user_profile_get_calls_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/profile",
+        json={"username": "johndoe", "phone": "5491155556666"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "profile", "get"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["username"] == "johndoe"
+
+
+@responses.activate
+def test_user_profile_update_filters_none_fields(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.PATCH,
+        f"{DEFAULT_API_BASE_URL}/users/profile",
+        json={"username": "newusername"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "profile", "update", "--username", "newusername"])
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {"username": "newusername"}
+
+
+def test_user_profile_update_requires_a_field(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+
+    result = runner.invoke(cli, ["user", "profile", "update"])
+
+    assert result.exit_code != 0
+    assert "Provide at least one field to update." in result.output
+
+
+@responses.activate
+def test_user_settings_get_calls_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/user_settings",
+        json={"language": "ES", "beta_version": True, "favorite_currency": "ARS"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "settings", "get"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["language"] == "ES"
+
+
+@responses.activate
+def test_user_settings_update_supports_boolean_and_currency(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.PATCH,
+        f"{DEFAULT_API_BASE_URL}/users/user_settings",
+        json={"message": "User settings updated successfully"},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "user",
+            "settings",
+            "update",
+            "--language",
+            "ES",
+            "--beta-version",
+            "--favourite-currency",
+            "ARS",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "language": "ES",
+        "beta_version": True,
+        "favourite_currency": "ARS",
+    }
+
+
+def test_user_settings_update_requires_a_field(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+
+    result = runner.invoke(cli, ["user", "settings", "update"])
+
+    assert result.exit_code != 0
+    assert "Provide at least one field to update." in result.output
+
+
+@responses.activate
+def test_deposit_crypto_calls_wallet_deposit(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/wallet/deposit",
+        json={"transaction_id": "tx-deposit-1", "network": "Polygon"},
+        status=201,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "deposit",
+            "crypto",
+            "--amount",
+            "100",
+            "--currency",
+            "USDT",
+            "--network",
+            "POLYGON",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "amount": 100.0,
+        "currency": "USDT",
+        "network": "POLYGON",
+    }
+
+
+@responses.activate
+def test_withdraw_crypto_calls_wallet_withdraw(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/wallet/withdraw",
+        json={"transaction_id": "tx-withdraw-1", "status": "Pending"},
+        status=201,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "withdraw",
+            "crypto",
+            "--address",
+            "TCZ7Gm6gmZhAFLLZWT12XwNLRwaWaxcVqA",
+            "--network",
+            "TRON",
+            "--currency",
+            "USDT",
+            "--amount",
+            "25",
+            "--receiver-name",
+            "Jane Doe",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "address": "TCZ7Gm6gmZhAFLLZWT12XwNLRwaWaxcVqA",
+        "network": "TRON",
+        "currency": "USDT",
+        "amount": 25.0,
+        "receiver_name": "Jane Doe",
+    }
+
+
 def test_preview_secret_handles_empty_short_and_long_values():
     assert _preview_secret(None) is None
     assert _preview_secret("short") == "short"

@@ -114,3 +114,55 @@ def test_http_error_falls_back_to_plain_text_body():
         client.get_home()
 
     assert exc_info.value.exit_code == 1
+
+
+@responses.activate
+def test_list_contacts_supports_filter_query():
+    responses.add(
+        responses.GET,
+        "https://api.example/contacts",
+        json={"contacts": []},
+        status=200,
+        match=[responses.matchers.query_param_matcher({"filter_type": "recent"})],
+    )
+
+    client = WapuClient("https://api.example")
+
+    assert client.list_contacts("recent") == {"contacts": []}
+
+
+@responses.activate
+def test_get_referral_omits_json_when_no_optional_fields_are_provided():
+    responses.add(responses.POST, "https://api.example/users/referral", json={"referral_code": "ABC123"}, status=200)
+
+    client = WapuClient("https://api.example")
+
+    assert client.get_referral() == {"referral_code": "ABC123"}
+    assert responses.calls[0].request.body is None
+
+
+@responses.activate
+def test_update_profile_filters_none_fields_from_json_body():
+    responses.add(responses.PATCH, "https://api.example/users/profile", json={"username": "alice"}, status=200)
+
+    client = WapuClient("https://api.example")
+
+    assert client.update_profile(username="alice") == {"username": "alice"}
+    assert responses.calls[0].request.body.decode("utf-8") == '{"username": "alice"}'
+
+
+@responses.activate
+def test_update_user_settings_sends_only_selected_fields():
+    responses.add(
+        responses.PATCH,
+        "https://api.example/users/user_settings",
+        json={"message": "User settings updated successfully"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.update_user_settings(language="ES", beta_version=True)
+
+    assert payload["message"] == "User settings updated successfully"
+    assert responses.calls[0].request.body.decode("utf-8") == '{"language": "ES", "beta_version": true}'
