@@ -10,6 +10,9 @@ from .config import CONFIG_PATH, ConfigStore, resolve_runtime_config
 from .errors import WapuCLIError
 from .output import emit_output
 
+CRYPTO_CURRENCIES = ["USDT", "USDC"]
+CRYPTO_NETWORKS = ["ETHEREUM", "BSC", "POLYGON", "ARBITRUM", "OPTIMISM", "AVAX", "TRON", "SOLANA", "BINANCE_ID"]
+
 
 @dataclass
 class RuntimeState:
@@ -112,6 +115,11 @@ def print_payload(state: RuntimeState, payload: object) -> None:
     click.echo(emit_output(payload, output_format=state.output))
 
 
+def require_update_fields(payload: dict[str, object]) -> None:
+    if not any(value is not None for value in payload.values()):
+        raise click.ClickException("Provide at least one field to update.")
+
+
 @cli.group()
 def auth() -> None:
     """Manage local authentication."""
@@ -212,6 +220,20 @@ def auth_logout(state: RuntimeState) -> None:
     )
 
 
+@cli.group("api-token")
+def api_token_group() -> None:
+    """Inspect API token metadata."""
+
+
+@api_token_group.command("status")
+@click.pass_obj
+def api_token_status(state: RuntimeState) -> None:
+    """Show API token status without revealing the token."""
+    require_auth(state)
+    payload = state.client.get_api_token_status()
+    print_payload(state, payload)
+
+
 @cli.command()
 @click.pass_obj
 def balance(state: RuntimeState) -> None:
@@ -230,6 +252,18 @@ def balance(state: RuntimeState) -> None:
 @cli.group()
 def deposit() -> None:
     """Manage deposits."""
+
+
+@deposit.command("crypto")
+@click.option("--amount", type=float, required=True)
+@click.option("--currency", type=click.Choice(CRYPTO_CURRENCIES), required=True)
+@click.option("--network", type=click.Choice(CRYPTO_NETWORKS), required=True)
+@click.pass_obj
+def deposit_crypto(state: RuntimeState, amount: float, currency: str, network: str) -> None:
+    """Create an on-chain crypto deposit."""
+    require_auth(state)
+    payload = state.client.create_crypto_deposit(amount=amount, currency=currency, network=network)
+    print_payload(state, payload)
 
 
 @deposit.group("lightning")
@@ -281,9 +315,235 @@ def tx_get(state: RuntimeState, transaction_id: str) -> None:
     print_payload(state, payload)
 
 
+@tx_group.command("cancel")
+@click.argument("transaction_id")
+@click.pass_obj
+def tx_cancel(state: RuntimeState, transaction_id: str) -> None:
+    """Cancel a transaction."""
+    require_auth(state)
+    payload = state.client.cancel_transaction(transaction_id)
+    print_payload(state, payload)
+
+
+@tx_group.command("tentative-amount")
+@click.option("--amount", type=float, required=True)
+@click.option("--currency-payment", type=click.Choice(["ARS", "BRL", "USD"]), required=True)
+@click.option("--currency-taken", type=click.Choice(["USDT", "SAT"]), required=True)
+@click.option("--type", "transaction_type", required=True)
+@click.pass_obj
+def tx_tentative_amount(
+    state: RuntimeState,
+    amount: float,
+    currency_payment: str,
+    currency_taken: str,
+    transaction_type: str,
+) -> None:
+    """Preview the cost of a transaction."""
+    require_auth(state)
+    payload = state.client.get_tentative_amount(
+        amount=amount,
+        currency_payment=currency_payment,
+        currency_taken=currency_taken,
+        transaction_type=transaction_type,
+    )
+    print_payload(state, payload)
+
+
+@tx_group.command("inner-transfer")
+@click.option("--amount", type=float, required=True)
+@click.option("--currency", type=click.Choice(["USDT"]), required=True)
+@click.option("--receiver-username", required=True)
+@click.pass_obj
+def tx_inner_transfer(state: RuntimeState, amount: float, currency: str, receiver_username: str) -> None:
+    """Create an internal transfer to another user."""
+    require_auth(state)
+    payload = state.client.create_inner_transfer(
+        amount=amount,
+        currency=currency,
+        receiver_username=receiver_username,
+    )
+    print_payload(state, payload)
+
+
+@cli.group("contacts")
+def contacts_group() -> None:
+    """Manage contacts."""
+
+
+@contacts_group.command("list")
+@click.option("--filter-type", type=click.Choice(["favourite", "recent"]))
+@click.pass_obj
+def contacts_list(state: RuntimeState, filter_type: str | None) -> None:
+    """List contacts."""
+    require_auth(state)
+    payload = state.client.list_contacts(filter_type=filter_type)
+    print_payload(state, payload)
+
+
+@contacts_group.command("favourite")
+@click.argument("contact_id", type=int)
+@click.option("--value", type=click.Choice(["true", "false"]), required=True)
+@click.pass_obj
+def contacts_favourite(state: RuntimeState, contact_id: int, value: str) -> None:
+    """Mark or unmark a contact as favourite."""
+    require_auth(state)
+    payload = state.client.set_contact_favourite(contact_id=contact_id, is_favourite=value == "true")
+    print_payload(state, payload)
+
+
+@contacts_group.command("delete")
+@click.argument("contact_id", type=int)
+@click.pass_obj
+def contacts_delete(state: RuntimeState, contact_id: int) -> None:
+    """Delete a contact."""
+    require_auth(state)
+    payload = state.client.delete_contact(contact_id)
+    print_payload(state, payload)
+
+
+@cli.group("user")
+def user_group() -> None:
+    """Inspect user data and preferences."""
+
+
+@user_group.command("spending-limit")
+@click.pass_obj
+def user_spending_limit(state: RuntimeState) -> None:
+    """Show the current spending limit."""
+    require_auth(state)
+    payload = state.client.get_spending_limit()
+    print_payload(state, payload)
+
+
+@user_group.command("referral")
+@click.option("--email")
+@click.option("--phone")
+@click.pass_obj
+def user_referral(state: RuntimeState, email: str | None, phone: str | None) -> None:
+    """Get or create the referral link."""
+    require_auth(state)
+    payload = state.client.get_referral(email=email, phone=phone)
+    print_payload(state, payload)
+
+
+@user_group.group("profile")
+def user_profile_group() -> None:
+    """Manage profile data."""
+
+
+@user_profile_group.command("get")
+@click.pass_obj
+def user_profile_get(state: RuntimeState) -> None:
+    """Get the current profile."""
+    require_auth(state)
+    payload = state.client.get_profile()
+    print_payload(state, payload)
+
+
+@user_profile_group.command("update")
+@click.option("--username")
+@click.option("--telegram")
+@click.option("--phone")
+@click.option("--beta-version")
+@click.pass_obj
+def user_profile_update(
+    state: RuntimeState,
+    username: str | None,
+    telegram: str | None,
+    phone: str | None,
+    beta_version: str | None,
+) -> None:
+    """Update the current profile."""
+    require_auth(state)
+    require_update_fields(
+        {
+            "username": username,
+            "telegram": telegram,
+            "phone": phone,
+            "beta_version": beta_version,
+        }
+    )
+    payload = state.client.update_profile(
+        username=username,
+        telegram=telegram,
+        phone=phone,
+        beta_version=beta_version,
+    )
+    print_payload(state, payload)
+
+
+@user_group.group("settings")
+def user_settings_group() -> None:
+    """Manage user settings."""
+
+
+@user_settings_group.command("get")
+@click.pass_obj
+def user_settings_get(state: RuntimeState) -> None:
+    """Get current user settings."""
+    require_auth(state)
+    payload = state.client.get_user_settings()
+    print_payload(state, payload)
+
+
+@user_settings_group.command("update")
+@click.option("--language", type=click.Choice(["EN", "ES", "PT"]))
+@click.option("--beta-version/--no-beta-version", default=None)
+@click.option("--favourite-currency", type=click.Choice(["USD", "ARS", "BRL"]))
+@click.pass_obj
+def user_settings_update(
+    state: RuntimeState,
+    language: str | None,
+    beta_version: bool | None,
+    favourite_currency: str | None,
+) -> None:
+    """Update user settings."""
+    require_auth(state)
+    require_update_fields(
+        {
+            "language": language,
+            "beta_version": beta_version,
+            "favourite_currency": favourite_currency,
+        }
+    )
+    payload = state.client.update_user_settings(
+        language=language,
+        beta_version=beta_version,
+        favourite_currency=favourite_currency,
+    )
+    print_payload(state, payload)
+
+
 @cli.group("withdraw")
 def withdraw_group() -> None:
     """Create withdrawal requests."""
+
+
+@withdraw_group.command("crypto")
+@click.option("--address", required=True)
+@click.option("--network", type=click.Choice(CRYPTO_NETWORKS), required=True)
+@click.option("--currency", type=click.Choice(CRYPTO_CURRENCIES), required=True)
+@click.option("--amount", type=float, required=True)
+@click.option("--receiver-name")
+@click.pass_obj
+def withdraw_crypto(
+    state: RuntimeState,
+    address: str,
+    network: str,
+    currency: str,
+    amount: float,
+    receiver_name: str | None,
+) -> None:
+    """Create a crypto withdrawal."""
+    require_auth(state)
+    payload = state.client.create_crypto_withdrawal(
+        address=address,
+        network=network,
+        currency=currency,
+        amount=amount,
+        receiver_name=receiver_name,
+    )
+    print_payload(state, payload)
 
 
 @withdraw_group.command("ars")
