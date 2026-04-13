@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 *.egg-info/
 .env
+.omx/
+.omc/
+.claude/
+.cursor/
+.vscode/
+.idea/
