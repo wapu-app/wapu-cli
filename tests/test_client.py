@@ -166,3 +166,47 @@ def test_update_user_settings_sends_only_selected_fields():
 
     assert payload["message"] == "User settings updated successfully"
     assert responses.calls[0].request.body.decode("utf-8") == '{"language": "ES", "beta_version": true}'
+
+
+@responses.activate
+def test_create_direct_fiat_tentative_uses_json_body():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/direct-fiat/tentatives",
+        json={"uuid": "tent-1", "status": "CREATED"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.create_direct_fiat_tentative(
+        amount_ars=25000,
+        transfer_type="fiat_transfer",
+        alias="juan.perez.alias",
+        receiver_name="Juan Perez",
+        funding_method="LIGHTNING",
+        network="LIGHTNING",
+    )
+
+    assert payload["uuid"] == "tent-1"
+    assert responses.calls[0].request.body.decode("utf-8") == (
+        '{"amount_ars": 25000, "type": "fiat_transfer", "alias": "juan.perez.alias", '
+        '"receiver_name": "Juan Perez", "funding_method": "LIGHTNING", "network": "LIGHTNING"}'
+    )
+
+
+@responses.activate
+def test_issue_direct_fiat_tentative_funding_uses_empty_json_body():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/direct-fiat/tentatives/tent-1/funding",
+        json={"uuid": "tent-1", "status": "FUNDING_ISSUED"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.issue_direct_fiat_tentative_funding("tent-1")
+
+    assert payload["status"] == "FUNDING_ISSUED"
+    assert responses.calls[0].request.body.decode("utf-8") == "{}"
