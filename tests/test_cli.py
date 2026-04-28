@@ -351,6 +351,173 @@ def test_tx_get_handles_not_found(runner, config_store):
 
 
 @responses.activate
+def test_tx_direct_payment_create_uses_json_body(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives",
+        json={"uuid": "tent-1", "status": "CREATED"},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "direct-payment",
+            "create",
+            "--amount-ars",
+            "25000",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "juan.perez.alias",
+            "--receiver-name",
+            "Juan Perez",
+            "--funding-method",
+            "LIGHTNING",
+            "--network",
+            "LIGHTNING",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["uuid"] == "tent-1"
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "amount_ars": 25000.0,
+        "type": "fiat_transfer",
+        "alias": "juan.perez.alias",
+        "receiver_name": "Juan Perez",
+        "funding_method": "LIGHTNING",
+        "network": "LIGHTNING",
+    }
+
+
+@responses.activate
+def test_tx_direct_payment_funding_calls_uuid_endpoint(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives/tent-1/funding",
+        json={"uuid": "tent-1", "status": "FUNDING_ISSUED", "deposit_transaction_id": "dep-1"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "tx", "direct-payment", "funding", "tent-1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["deposit_transaction_id"] == "dep-1"
+    assert responses.calls[0].request.body.decode("utf-8") == "{}"
+
+
+@responses.activate
+def test_tx_direct_payment_create_and_fund_returns_only_funding_payload(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives",
+        json={"uuid": "tent-1", "status": "CREATED"},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives/tent-1/funding",
+        json={"uuid": "tent-1", "status": "FUNDING_ISSUED", "lightning_pr": "lnbc1...", "deposit_transaction_id": "dep-1"},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "direct-payment",
+            "create-and-fund",
+            "--amount-ars",
+            "25000",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "juan.perez.alias",
+            "--receiver-name",
+            "Juan Perez",
+            "--funding-method",
+            "LIGHTNING",
+            "--network",
+            "LIGHTNING",
+        ],
+    )
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload == {
+        "uuid": "tent-1",
+        "status": "FUNDING_ISSUED",
+        "lightning_pr": "lnbc1...",
+        "deposit_transaction_id": "dep-1",
+    }
+    assert len(responses.calls) == 2
+
+
+def test_tx_direct_payment_create_requires_authentication(runner):
+    result = runner.invoke(
+        cli,
+        [
+            "tx",
+            "direct-payment",
+            "create",
+            "--amount-ars",
+            "25000",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "juan.perez.alias",
+            "--receiver-name",
+            "Juan Perez",
+            "--funding-method",
+            "LIGHTNING",
+            "--network",
+            "LIGHTNING",
+        ],
+    )
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+def test_tx_direct_payment_rejects_invalid_funding_network_combo(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "tx",
+            "direct-payment",
+            "create",
+            "--amount-ars",
+            "25000",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "juan.perez.alias",
+            "--receiver-name",
+            "Juan Perez",
+            "--funding-method",
+            "USDT",
+            "--network",
+            "LIGHTNING",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "USDT funding_method requires an EVM network" in result.output
+
+
+@responses.activate
 def test_withdraw_ars_fiat_transfer_uses_form_data(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
