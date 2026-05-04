@@ -12,6 +12,9 @@ from .output import emit_output
 
 CRYPTO_CURRENCIES = ["USDT", "USDC"]
 CRYPTO_NETWORKS = ["ETHEREUM", "BSC", "POLYGON", "ARBITRUM", "OPTIMISM", "AVAX", "TRON", "SOLANA", "BINANCE_ID"]
+DIRECT_PAYMENT_TRANSFER_TYPES = ["fiat_transfer", "fast_fiat_transfer"]
+DIRECT_PAYMENT_FUNDING_METHODS = ["LIGHTNING", "USDT"]
+DIRECT_PAYMENT_NETWORKS = ["LIGHTNING", "ETHEREUM", "POLYGON", "ARBITRUM"]
 
 
 @dataclass
@@ -118,6 +121,34 @@ def print_payload(state: RuntimeState, payload: object) -> None:
 def require_update_fields(payload: dict[str, object]) -> None:
     if not any(value is not None for value in payload.values()):
         raise click.ClickException("Provide at least one field to update.")
+
+
+def validate_direct_payment_network(funding_method: str, network: str) -> None:
+    if funding_method == "LIGHTNING" and network != "LIGHTNING":
+        raise click.ClickException("LIGHTNING funding_method requires --network LIGHTNING.")
+    if funding_method == "USDT" and network == "LIGHTNING":
+        raise click.ClickException("USDT funding_method requires an EVM network: ETHEREUM, POLYGON, or ARBITRUM.")
+
+
+def create_direct_payment_tentative(
+    state: RuntimeState,
+    *,
+    amount_ars: float,
+    transfer_type: str,
+    alias: str,
+    receiver_name: str,
+    funding_method: str,
+    network: str,
+) -> dict[str, object]:
+    validate_direct_payment_network(funding_method, network)
+    return state.client.create_direct_fiat_tentative(
+        amount_ars=amount_ars,
+        transfer_type=transfer_type,
+        alias=alias,
+        receiver_name=receiver_name,
+        funding_method=funding_method,
+        network=network,
+    )
 
 
 @cli.group()
@@ -365,6 +396,87 @@ def tx_inner_transfer(state: RuntimeState, amount: float, currency: str, receive
     print_payload(state, payload)
 
 
+@tx_group.group("direct-payment")
+def tx_direct_payment_group() -> None:
+    """Create direct-fiat tentatives and funding instructions."""
+
+
+@tx_direct_payment_group.command("create")
+@click.option("--amount-ars", type=float, required=True)
+@click.option("--type", "transfer_type", type=click.Choice(DIRECT_PAYMENT_TRANSFER_TYPES), required=True)
+@click.option("--alias", required=True)
+@click.option("--receiver-name", required=True)
+@click.option("--funding-method", type=click.Choice(DIRECT_PAYMENT_FUNDING_METHODS), required=True)
+@click.option("--network", type=click.Choice(DIRECT_PAYMENT_NETWORKS), required=True)
+@click.pass_obj
+def tx_direct_payment_create(
+    state: RuntimeState,
+    amount_ars: float,
+    transfer_type: str,
+    alias: str,
+    receiver_name: str,
+    funding_method: str,
+    network: str,
+) -> None:
+    """Create a direct-fiat tentative payment with a frozen quote."""
+    require_auth(state)
+    payload = create_direct_payment_tentative(
+        state,
+        amount_ars=amount_ars,
+        transfer_type=transfer_type,
+        alias=alias,
+        receiver_name=receiver_name,
+        funding_method=funding_method,
+        network=network,
+    )
+    print_payload(state, payload)
+
+
+@tx_direct_payment_group.command("funding")
+@click.argument("tentative_uuid")
+@click.pass_obj
+def tx_direct_payment_funding(state: RuntimeState, tentative_uuid: str) -> None:
+    """Issue funding instructions for an existing direct-fiat tentative."""
+    require_auth(state)
+    payload = state.client.issue_direct_fiat_tentative_funding(tentative_uuid)
+    print_payload(state, payload)
+
+
+@tx_direct_payment_group.command("create-and-fund")
+@click.option("--amount-ars", type=float, required=True)
+@click.option("--type", "transfer_type", type=click.Choice(DIRECT_PAYMENT_TRANSFER_TYPES), required=True)
+@click.option("--alias", required=True)
+@click.option("--receiver-name", required=True)
+@click.option("--funding-method", type=click.Choice(DIRECT_PAYMENT_FUNDING_METHODS), required=True)
+@click.option("--network", type=click.Choice(DIRECT_PAYMENT_NETWORKS), required=True)
+@click.pass_obj
+def tx_direct_payment_create_and_fund(
+    state: RuntimeState,
+    amount_ars: float,
+    transfer_type: str,
+    alias: str,
+    receiver_name: str,
+    funding_method: str,
+    network: str,
+) -> None:
+    """Create a tentative and immediately issue funding instructions."""
+    require_auth(state)
+    tentative = create_direct_payment_tentative(
+        state,
+        amount_ars=amount_ars,
+        transfer_type=transfer_type,
+        alias=alias,
+        receiver_name=receiver_name,
+        funding_method=funding_method,
+        network=network,
+    )
+    tentative_uuid = tentative.get("uuid")
+    if not isinstance(tentative_uuid, str) or not tentative_uuid.strip():
+        raise click.ClickException("Direct payment tentative creation succeeded but the backend did not return a uuid.")
+    payload = state.client.issue_direct_fiat_tentative_funding(tentative_uuid)
+    print_payload(state, payload)
+
+
 @cli.group("contacts")
 def contacts_group() -> None:
     """Manage contacts."""
@@ -547,7 +659,7 @@ def withdraw_crypto(
 
 
 @withdraw_group.command("ars")
-@click.option("--type", "transfer_type", type=click.Choice(["fiat_transfer", "fast_fiat_transfer"]), required=True)
+@click.option("--type", "transfer_type", type=click.Choice(DIRECT_PAYMENT_TRANSFER_TYPES), required=True)
 @click.option("--alias", required=True)
 @click.option("--amount", type=float, required=True)
 @click.option("--receiver-name")

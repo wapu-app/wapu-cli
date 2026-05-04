@@ -146,6 +146,38 @@ class WapuClient:
             data["receiver_name"] = receiver_name
         return self._request("POST", "/transactions/create", data=data)
 
+    def create_direct_fiat_tentative(
+        self,
+        *,
+        amount_ars: float,
+        transfer_type: str,
+        alias: str,
+        receiver_name: str | None = None,
+        funding_method: str,
+        network: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/transactions/direct-fiat/tentatives",
+            json=self._compact_payload(
+                {
+                    "amount_ars": amount_ars,
+                    "type": transfer_type,
+                    "alias": alias,
+                    "receiver_name": receiver_name,
+                    "funding_method": funding_method,
+                    "network": network,
+                }
+            ),
+        )
+
+    def issue_direct_fiat_tentative_funding(self, tentative_uuid: str) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/transactions/direct-fiat/tentatives/{tentative_uuid}/funding",
+            json={},
+        )
+
     def get_spending_limit(self) -> dict[str, Any]:
         return self._request("GET", "/users/spending_limit")
 

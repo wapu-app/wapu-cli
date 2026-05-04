@@ -149,6 +149,39 @@ Cotizar monto tentativo:
 wapu tx tentative-amount --amount 10000 --currency-payment ARS --currency-taken USDT --type fiat_transfer
 ```
 
+Direct payment:
+
+```bash
+wapu tx direct-payment create \
+  --amount-ars 25000 \
+  --type fiat_transfer \
+  --alias juan.perez.alias \
+  --receiver-name 'Juan Perez' \
+  --funding-method LIGHTNING \
+  --network LIGHTNING
+
+wapu tx direct-payment funding <tentative_uuid>
+
+wapu tx direct-payment create-and-fund \
+  --amount-ars 25000 \
+  --type fast_fiat_transfer \
+  --alias juan.perez.alias \
+  --receiver-name 'Juan Perez' \
+  --funding-method USDT \
+  --network POLYGON
+```
+
+Follow-up del flujo direct payment:
+
+```bash
+# inspeccionar el depósito/funding emitido
+wapu tx get <deposit_transaction_id>
+
+# cuando ya tengas el executed_transaction_id (por ejemplo desde backend/local DB),
+# inspeccionar la fiat transfer emitida
+wapu tx get <executed_transaction_id>
+```
+
 Transferencia interna:
 
 ```bash
@@ -217,6 +250,15 @@ wapu --quiet balance
 
 ```bash
 uv run pytest
+```
+
+## Backend local / staging
+
+Puedes apuntar el CLI a otro backend con `--api-base-url` o `WAPU_API_BASE_URL`:
+
+```bash
+wapu --api-base-url http://127.0.0.1:8000 auth login --email zource.code+local@gmail.com --password test
+wapu --api-base-url http://127.0.0.1:8000 tx direct-payment create-and-fund ...
 ```
 
 ## Smoke Test Manual
