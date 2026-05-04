@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wapu"
-version = "0.2.0"
+version = "0.4.0"
 description = "CLI for interacting with the WapuPay backend"
 readme = "README.md"
 license = "MIT"
