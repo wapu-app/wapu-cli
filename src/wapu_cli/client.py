@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -15,10 +16,17 @@ class AuthContext:
 
 
 class WapuClient:
-    def __init__(self, base_url: str, auth: AuthContext | None = None, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        auth: AuthContext | None = None,
+        timeout: int = 30,
+        wapu_user_id: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth = auth or AuthContext()
         self.timeout = timeout
+        self.wapu_user_id = wapu_user_id
 
     def login(self, email: str, password: str) -> dict[str, Any]:
         return self._request("POST", "/users/login", json={"email": email, "password": password})
@@ -105,17 +113,25 @@ class WapuClient:
         currency_payment: str,
         currency_taken: str,
         transaction_type: str,
+        alias: str | None = None,
     ) -> dict[str, Any]:
         return self._request(
             "POST",
             "/transactions/tentative-amount",
-            json={
-                "amount": amount,
-                "currency_payment": currency_payment,
-                "currency_taken": currency_taken,
-                "type": transaction_type,
-            },
+            json=self._compact_payload(
+                {
+                    "amount": amount,
+                    "currency_payment": currency_payment,
+                    "currency_taken": currency_taken,
+                    "type": transaction_type,
+                    "alias": alias,
+                }
+            ),
         )
+
+    def search_fiat_bank_account(self, query: str) -> dict[str, Any]:
+        encoded_query = quote(query, safe="")
+        return self._request("GET", f"/transactions/bank-accounts/search/{encoded_query}")
 
     def create_inner_transfer(self, *, amount: float, currency: str, receiver_username: str) -> dict[str, Any]:
         return self._request(
@@ -171,12 +187,18 @@ class WapuClient:
             ),
         )
 
+    def get_direct_fiat_tentative(self, tentative_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/transactions/direct-fiat/tentatives/{tentative_id}")
+
     def issue_direct_fiat_tentative_funding(self, tentative_uuid: str) -> dict[str, Any]:
         return self._request(
             "POST",
             f"/transactions/direct-fiat/tentatives/{tentative_uuid}/funding",
             json={},
         )
+
+    def create_b2b_sub_user(self, email: str) -> dict[str, Any]:
+        return self._request("POST", "/users/b2b", json={"email": email})
 
     def get_spending_limit(self) -> dict[str, Any]:
         return self._request("GET", "/users/spending_limit")
@@ -242,6 +264,8 @@ class WapuClient:
             headers["Authorization"] = f"Bearer {self.auth.access_token}"
         elif self.auth.api_key:
             headers["X-API-Key"] = self.auth.api_key
+        if self.wapu_user_id:
+            headers["X-Wapu-User-Id"] = self.wapu_user_id
         return headers
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:

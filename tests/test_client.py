@@ -27,6 +27,24 @@ def test_headers_use_api_key():
     assert client._headers()["X-API-Key"] == "api-key"
 
 
+def test_headers_include_wapu_user_id_when_set():
+    client = WapuClient(
+        "https://api.example",
+        auth=AuthContext(api_key="api-key"),
+        wapu_user_id="sub-user-1",
+    )
+
+    headers = client._headers()
+    assert headers["X-Wapu-User-Id"] == "sub-user-1"
+    assert headers["X-API-Key"] == "api-key"
+
+
+def test_headers_omit_wapu_user_id_by_default():
+    client = WapuClient("https://api.example", auth=AuthContext(api_key="api-key"))
+
+    assert "X-Wapu-User-Id" not in client._headers()
+
+
 def test_request_wraps_network_errors(monkeypatch):
     client = WapuClient("https://api.example")
 
@@ -210,3 +228,117 @@ def test_issue_direct_fiat_tentative_funding_uses_empty_json_body():
 
     assert payload["status"] == "FUNDING_ISSUED"
     assert responses.calls[0].request.body.decode("utf-8") == "{}"
+
+
+@responses.activate
+def test_get_tentative_amount_omits_alias_when_not_provided():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/tentative-amount",
+        json={"usdt_amount": 4.85},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    client.get_tentative_amount(
+        amount=5000,
+        currency_payment="ARS",
+        currency_taken="USDT",
+        transaction_type="fiat_transfer",
+    )
+
+    assert responses.calls[0].request.body.decode("utf-8") == (
+        '{"amount": 5000, "currency_payment": "ARS", "currency_taken": "USDT", "type": "fiat_transfer"}'
+    )
+
+
+@responses.activate
+def test_get_tentative_amount_includes_alias_when_provided():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/tentative-amount",
+        json={"usdt_amount": 4.85, "valid_cbu_alias": True},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.get_tentative_amount(
+        amount=5000,
+        currency_payment="ARS",
+        currency_taken="USDT",
+        transaction_type="fiat_transfer",
+        alias="moni.uala",
+    )
+
+    assert payload["valid_cbu_alias"] is True
+    assert responses.calls[0].request.body.decode("utf-8") == (
+        '{"amount": 5000, "currency_payment": "ARS", "currency_taken": "USDT", '
+        '"type": "fiat_transfer", "alias": "moni.uala"}'
+    )
+
+
+@responses.activate
+def test_search_fiat_bank_account_gets_query_path():
+    responses.add(
+        responses.GET,
+        "https://api.example/transactions/bank-accounts/search/moni.uala",
+        json={"cvu": "3840200500000008458511", "alias": "moni.uala", "bank": "Ualá"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.search_fiat_bank_account("moni.uala")
+
+    assert payload["bank"] == "Ualá"
+    assert responses.calls[0].request.body is None
+
+
+@responses.activate
+def test_get_direct_fiat_tentative_fetches_by_id():
+    responses.add(
+        responses.GET,
+        "https://api.example/transactions/direct-fiat/tentatives/tent-1",
+        json={"id": "tent-1", "status": "pending"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.get_direct_fiat_tentative("tent-1")
+
+    assert payload == {"id": "tent-1", "status": "pending"}
+
+
+@responses.activate
+def test_create_b2b_sub_user_posts_email():
+    responses.add(
+        responses.POST,
+        "https://api.example/users/b2b",
+        json={"wapu_user_id": "sub-1", "email": "cliente@empresa.com"},
+        status=201,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.create_b2b_sub_user("cliente@empresa.com")
+
+    assert payload["wapu_user_id"] == "sub-1"
+    assert responses.calls[0].request.body.decode("utf-8") == '{"email": "cliente@empresa.com"}'
+
+
+@responses.activate
+def test_request_sends_wapu_user_id_header_when_configured():
+    responses.add(responses.GET, "https://api.example/users/home", json={}, status=200)
+
+    client = WapuClient(
+        "https://api.example",
+        auth=AuthContext(api_key="api-key"),
+        wapu_user_id="sub-user-1",
+    )
+
+    client.get_home()
+
+    assert responses.calls[0].request.headers["X-Wapu-User-Id"] == "sub-user-1"
