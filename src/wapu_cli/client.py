@@ -48,7 +48,7 @@ class WapuClient:
         return {"lightning_address": f"{username.strip().lower()}@wapu.app"}
 
     def create_lightning_deposit(self, amount: float, currency: str) -> dict[str, Any]:
-        return self._request("POST", "/wallet/deposit_lightning", json={"amount": amount, "currency": currency})
+        return self._request("POST", "/wallet/deposit-lightning", json={"amount": amount, "currency": currency})
 
     def create_crypto_deposit(self, *, amount: float, currency: str, network: str) -> dict[str, Any]:
         return self._request(
@@ -87,7 +87,7 @@ class WapuClient:
     def set_contact_favourite(self, *, contact_id: int, is_favourite: bool) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/contacts/is_favourite",
+            "/contacts/is-favourite",
             data={
                 "contact_id": str(contact_id),
                 "is_favourite": "true" if is_favourite else "false",
@@ -98,7 +98,7 @@ class WapuClient:
         return self._request("DELETE", f"/contacts/{contact_id}")
 
     def list_transactions(self) -> dict[str, Any]:
-        return self._request("GET", "/transactions/my_transactions")
+        return self._request("GET", "/transactions/my-transactions")
 
     def get_transaction(self, transaction_id: str) -> dict[str, Any]:
         return self._request("GET", f"/transactions/{transaction_id}")
@@ -136,7 +136,7 @@ class WapuClient:
     def create_inner_transfer(self, *, amount: float, currency: str, receiver_username: str) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/transactions/inner_transfer",
+            "/transactions/inner-transfer",
             data={
                 "amount": str(amount),
                 "currency": currency,
@@ -171,6 +171,8 @@ class WapuClient:
         receiver_name: str | None = None,
         funding_method: str,
         network: str,
+        external_reference: str | None = None,
+        refund_address: str | None = None,
     ) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -183,6 +185,8 @@ class WapuClient:
                     "receiver_name": receiver_name,
                     "funding_method": funding_method,
                     "network": network,
+                    "external_reference": external_reference,
+                    "refund_address": refund_address,
                 }
             ),
         )
@@ -200,8 +204,14 @@ class WapuClient:
     def create_b2b_sub_user(self, email: str) -> dict[str, Any]:
         return self._request("POST", "/users/b2b", json={"email": email})
 
+    def create_b2b_sub_user_api_token(self, user_uuid: str) -> dict[str, Any]:
+        return self._request("POST", f"/users/b2b/{quote(user_uuid, safe='')}/api-token", json={})
+
+    def revoke_b2b_sub_user_api_token(self, user_uuid: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/users/b2b/{quote(user_uuid, safe='')}/api-token")
+
     def get_spending_limit(self) -> dict[str, Any]:
-        return self._request("GET", "/users/spending_limit")
+        return self._request("GET", "/users/spending-limit")
 
     def get_referral(self, *, email: str | None = None, phone: str | None = None) -> dict[str, Any]:
         payload = self._compact_payload({"email": email, "phone": phone})
@@ -235,7 +245,7 @@ class WapuClient:
         )
 
     def get_user_settings(self) -> dict[str, Any]:
-        return self._request("GET", "/users/user_settings")
+        return self._request("GET", "/users/user-settings")
 
     def update_user_settings(
         self,
@@ -246,7 +256,7 @@ class WapuClient:
     ) -> dict[str, Any]:
         return self._request(
             "PATCH",
-            "/users/user_settings",
+            "/users/user-settings",
             json=self._compact_payload(
                 {
                     "language": language,

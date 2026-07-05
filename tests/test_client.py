@@ -173,7 +173,7 @@ def test_update_profile_filters_none_fields_from_json_body():
 def test_update_user_settings_sends_only_selected_fields():
     responses.add(
         responses.PATCH,
-        "https://api.example/users/user_settings",
+        "https://api.example/users/user-settings",
         json={"message": "User settings updated successfully"},
         status=200,
     )
@@ -327,6 +327,101 @@ def test_create_b2b_sub_user_posts_email():
 
     assert payload["wapu_user_id"] == "sub-1"
     assert responses.calls[0].request.body.decode("utf-8") == '{"email": "cliente@empresa.com"}'
+
+
+@responses.activate
+def test_create_direct_fiat_tentative_includes_optional_fields():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/direct-fiat/tentatives",
+        json={"uuid": "tent-2", "status": "CREATED"},
+        status=201,
+    )
+
+    client = WapuClient("https://api.example")
+
+    client.create_direct_fiat_tentative(
+        amount_ars=25000,
+        transfer_type="fiat_transfer",
+        alias="juan.perez.alias",
+        receiver_name="Juan Perez",
+        funding_method="USDT",
+        network="POLYGON",
+        external_reference="order-123",
+        refund_address="0xabc123",
+    )
+
+    assert responses.calls[0].request.body.decode("utf-8") == (
+        '{"amount_ars": 25000, "type": "fiat_transfer", "alias": "juan.perez.alias", '
+        '"receiver_name": "Juan Perez", "funding_method": "USDT", "network": "POLYGON", '
+        '"external_reference": "order-123", "refund_address": "0xabc123"}'
+    )
+
+
+@responses.activate
+def test_get_direct_fiat_tentative_surfaces_refund_transaction_id():
+    responses.add(
+        responses.GET,
+        "https://api.example/transactions/direct-fiat/tentatives/tent-1",
+        json={"id": "tent-1", "status": "REFUNDED", "refund_transaction_id": "rtx-9"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.get_direct_fiat_tentative("tent-1")
+
+    assert payload["refund_transaction_id"] == "rtx-9"
+
+
+@responses.activate
+def test_issue_direct_fiat_tentative_funding_surfaces_refund_transaction_id():
+    responses.add(
+        responses.POST,
+        "https://api.example/transactions/direct-fiat/tentatives/tent-1/funding",
+        json={"uuid": "tent-1", "status": "FUNDING_ISSUED", "refund_transaction_id": None},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.issue_direct_fiat_tentative_funding("tent-1")
+
+    assert "refund_transaction_id" in payload
+    assert payload["refund_transaction_id"] is None
+
+
+@responses.activate
+def test_create_b2b_sub_user_api_token_posts_empty_body():
+    responses.add(
+        responses.POST,
+        "https://api.example/users/b2b/sub-1/api-token",
+        json={"token": "sk-sub-1", "wapu_user_id": "sub-1"},
+        status=201,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.create_b2b_sub_user_api_token("sub-1")
+
+    assert payload["token"] == "sk-sub-1"
+    assert responses.calls[0].request.body.decode("utf-8") == "{}"
+
+
+@responses.activate
+def test_revoke_b2b_sub_user_api_token_uses_delete():
+    responses.add(
+        responses.DELETE,
+        "https://api.example/users/b2b/sub-1/api-token",
+        json={"message": "Token revoked"},
+        status=200,
+    )
+
+    client = WapuClient("https://api.example")
+
+    payload = client.revoke_b2b_sub_user_api_token("sub-1")
+
+    assert payload["message"] == "Token revoked"
 
 
 @responses.activate
