@@ -11,7 +11,7 @@ from .errors import WapuCLIError
 from .output import emit_output
 
 CRYPTO_CURRENCIES = ["USDT", "USDC"]
-CRYPTO_NETWORKS = ["ETHEREUM", "BSC", "POLYGON", "ARBITRUM", "OPTIMISM", "AVAX", "TRON", "SOLANA", "BINANCE_ID"]
+CRYPTO_NETWORKS = ["ETHEREUM", "BSC", "POLYGON", "ARBITRUM", "OPTIMISM", "AVAX", "TRON", "SOLANA", "BINANCE_ID", "LIQUID"]
 DIRECT_PAYMENT_TRANSFER_TYPES = ["fiat_transfer", "fast_fiat_transfer"]
 DIRECT_PAYMENT_FUNDING_METHODS = ["LIGHTNING", "USDT"]
 DIRECT_PAYMENT_NETWORKS = ["LIGHTNING", "ETHEREUM", "POLYGON", "ARBITRUM"]
@@ -28,12 +28,14 @@ class RuntimeState:
     api_key: str | None
     auth_type: str | None
     stored_auth_type: str | None
+    wapu_user_id: str | None
 
     @property
     def client(self) -> WapuClient:
         return WapuClient(
             self.api_base_url,
             auth=AuthContext(access_token=self.access_token, api_key=self.api_key),
+            wapu_user_id=self.wapu_user_id,
         )
 
 
@@ -49,6 +51,10 @@ def main() -> None:
 @click.option("--api-base-url", help="Override the backend base URL.")
 @click.option("--access-token", help="Use a JWT access token for this invocation.")
 @click.option("--api-key", help="Use an API key for this invocation.")
+@click.option(
+    "--wapu-user-id",
+    help="Act on behalf of a managed sub-user (business accounts). Sent as the X-Wapu-User-Id header.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -59,6 +65,7 @@ def cli(
     api_base_url: str | None,
     access_token: str | None,
     api_key: str | None,
+    wapu_user_id: str | None,
 ) -> None:
     """CLI for interacting with the WapuPay backend."""
     resolved_output = resolve_output_format(
@@ -87,6 +94,7 @@ def cli(
         api_key=resolved["api_key"],
         auth_type=resolved["auth_type"],
         stored_auth_type=resolved["stored_auth_type"],
+        wapu_user_id=wapu_user_id,
     )
 
 
@@ -139,6 +147,8 @@ def create_direct_payment_tentative(
     receiver_name: str,
     funding_method: str,
     network: str,
+    external_reference: str | None = None,
+    refund_address: str | None = None,
 ) -> dict[str, object]:
     validate_direct_payment_network(funding_method, network)
     return state.client.create_direct_fiat_tentative(
@@ -148,6 +158,8 @@ def create_direct_payment_tentative(
         receiver_name=receiver_name,
         funding_method=funding_method,
         network=network,
+        external_reference=external_reference,
+        refund_address=refund_address,
     )
 
 
@@ -361,6 +373,7 @@ def tx_cancel(state: RuntimeState, transaction_id: str) -> None:
 @click.option("--currency-payment", type=click.Choice(["ARS", "BRL", "USD"]), required=True)
 @click.option("--currency-taken", type=click.Choice(["USDT", "SAT"]), required=True)
 @click.option("--type", "transaction_type", required=True)
+@click.option("--alias", help="Destination alias, CBU or CVU. Enables valid_cbu_alias validation for fiat transfers.")
 @click.pass_obj
 def tx_tentative_amount(
     state: RuntimeState,
@@ -368,6 +381,7 @@ def tx_tentative_amount(
     currency_payment: str,
     currency_taken: str,
     transaction_type: str,
+    alias: str | None,
 ) -> None:
     """Preview the cost of a transaction."""
     require_auth(state)
@@ -376,6 +390,7 @@ def tx_tentative_amount(
         currency_payment=currency_payment,
         currency_taken=currency_taken,
         transaction_type=transaction_type,
+        alias=alias,
     )
     print_payload(state, payload)
 
@@ -396,6 +411,16 @@ def tx_inner_transfer(state: RuntimeState, amount: float, currency: str, receive
     print_payload(state, payload)
 
 
+@tx_group.command("bank-account")
+@click.argument("query")
+@click.pass_obj
+def tx_bank_account(state: RuntimeState, query: str) -> None:
+    """Resolve an Argentine bank account by alias, CBU or CVU."""
+    require_auth(state)
+    payload = state.client.search_fiat_bank_account(query)
+    print_payload(state, payload)
+
+
 @tx_group.group("direct-payment")
 def tx_direct_payment_group() -> None:
     """Create direct-fiat tentatives and funding instructions."""
@@ -408,6 +433,8 @@ def tx_direct_payment_group() -> None:
 @click.option("--receiver-name", required=True)
 @click.option("--funding-method", type=click.Choice(DIRECT_PAYMENT_FUNDING_METHODS), required=True)
 @click.option("--network", type=click.Choice(DIRECT_PAYMENT_NETWORKS), required=True)
+@click.option("--external-reference", help="Optional merchant reference echoed back on the tentative.")
+@click.option("--refund-address", help="Optional crypto address to receive an eventual refund.")
 @click.pass_obj
 def tx_direct_payment_create(
     state: RuntimeState,
@@ -417,6 +444,8 @@ def tx_direct_payment_create(
     receiver_name: str,
     funding_method: str,
     network: str,
+    external_reference: str | None,
+    refund_address: str | None,
 ) -> None:
     """Create a direct-fiat tentative payment with a frozen quote."""
     require_auth(state)
@@ -428,7 +457,19 @@ def tx_direct_payment_create(
         receiver_name=receiver_name,
         funding_method=funding_method,
         network=network,
+        external_reference=external_reference,
+        refund_address=refund_address,
     )
+    print_payload(state, payload)
+
+
+@tx_direct_payment_group.command("get")
+@click.argument("tentative_id")
+@click.pass_obj
+def tx_direct_payment_get(state: RuntimeState, tentative_id: str) -> None:
+    """Get a direct-fiat tentative payment by id."""
+    require_auth(state)
+    payload = state.client.get_direct_fiat_tentative(tentative_id)
     print_payload(state, payload)
 
 
@@ -449,6 +490,8 @@ def tx_direct_payment_funding(state: RuntimeState, tentative_uuid: str) -> None:
 @click.option("--receiver-name", required=True)
 @click.option("--funding-method", type=click.Choice(DIRECT_PAYMENT_FUNDING_METHODS), required=True)
 @click.option("--network", type=click.Choice(DIRECT_PAYMENT_NETWORKS), required=True)
+@click.option("--external-reference", help="Optional merchant reference echoed back on the tentative.")
+@click.option("--refund-address", help="Optional crypto address to receive an eventual refund.")
 @click.pass_obj
 def tx_direct_payment_create_and_fund(
     state: RuntimeState,
@@ -458,6 +501,8 @@ def tx_direct_payment_create_and_fund(
     receiver_name: str,
     funding_method: str,
     network: str,
+    external_reference: str | None,
+    refund_address: str | None,
 ) -> None:
     """Create a tentative and immediately issue funding instructions."""
     require_auth(state)
@@ -469,6 +514,8 @@ def tx_direct_payment_create_and_fund(
         receiver_name=receiver_name,
         funding_method=funding_method,
         network=network,
+        external_reference=external_reference,
+        refund_address=refund_address,
     )
     tentative_uuid = tentative.get("uuid")
     if not isinstance(tentative_uuid, str) or not tentative_uuid.strip():
@@ -516,6 +563,46 @@ def contacts_delete(state: RuntimeState, contact_id: int) -> None:
 @cli.group("user")
 def user_group() -> None:
     """Inspect user data and preferences."""
+
+
+@user_group.group("b2b")
+def user_b2b_group() -> None:
+    """Manage B2B sub-users (business accounts)."""
+
+
+@user_b2b_group.command("create")
+@click.option("--email", required=True, help="Email of the managed sub-user to create.")
+@click.pass_obj
+def user_b2b_create(state: RuntimeState, email: str) -> None:
+    """Create a managed B2B sub-user (requires a business account)."""
+    require_auth(state)
+    payload = state.client.create_b2b_sub_user(email)
+    print_payload(state, payload)
+
+
+@user_b2b_group.group("token")
+def user_b2b_token_group() -> None:
+    """Manage API tokens for managed B2B sub-users."""
+
+
+@user_b2b_token_group.command("create")
+@click.argument("user_uuid")
+@click.pass_obj
+def user_b2b_token_create(state: RuntimeState, user_uuid: str) -> None:
+    """Mint an API token for a managed sub-user."""
+    require_auth(state)
+    payload = state.client.create_b2b_sub_user_api_token(user_uuid)
+    print_payload(state, payload)
+
+
+@user_b2b_token_group.command("revoke")
+@click.argument("user_uuid")
+@click.pass_obj
+def user_b2b_token_revoke(state: RuntimeState, user_uuid: str) -> None:
+    """Revoke the API token of a managed sub-user."""
+    require_auth(state)
+    payload = state.client.revoke_b2b_sub_user_api_token(user_uuid)
+    print_payload(state, payload)
 
 
 @user_group.command("spending-limit")

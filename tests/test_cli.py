@@ -247,7 +247,7 @@ def test_deposit_lightning_create_calls_endpoint(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.POST,
-        f"{DEFAULT_API_BASE_URL}/wallet/deposit_lightning",
+        f"{DEFAULT_API_BASE_URL}/wallet/deposit-lightning",
         json={"transaction_id": "tx-1", "lnurl_pr_invoice": "lnbc1...", "status": "Pending"},
         status=200,
     )
@@ -305,7 +305,7 @@ def test_tx_list_returns_transactions(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.GET,
-        f"{DEFAULT_API_BASE_URL}/transactions/my_transactions",
+        f"{DEFAULT_API_BASE_URL}/transactions/my-transactions",
         json={"transactions": [{"transaction_id": "tx-1", "status": "Pending", "type": "deposit"}]},
         status=200,
     )
@@ -392,6 +392,56 @@ def test_tx_direct_payment_create_uses_json_body(runner, config_store):
         "receiver_name": "Juan Perez",
         "funding_method": "LIGHTNING",
         "network": "LIGHTNING",
+    }
+
+
+@responses.activate
+def test_tx_direct_payment_create_forwards_optional_fields(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives",
+        json={"uuid": "tent-1", "status": "CREATED"},
+        status=201,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "direct-payment",
+            "create",
+            "--amount-ars",
+            "25000",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "juan.perez.alias",
+            "--receiver-name",
+            "Juan Perez",
+            "--funding-method",
+            "USDT",
+            "--network",
+            "POLYGON",
+            "--external-reference",
+            "order-123",
+            "--refund-address",
+            "0xabc123",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "amount_ars": 25000.0,
+        "type": "fiat_transfer",
+        "alias": "juan.perez.alias",
+        "receiver_name": "Juan Perez",
+        "funding_method": "USDT",
+        "network": "POLYGON",
+        "external_reference": "order-123",
+        "refund_address": "0xabc123",
     }
 
 
@@ -691,7 +741,7 @@ def test_contacts_favourite_uses_form_data(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.POST,
-        f"{DEFAULT_API_BASE_URL}/contacts/is_favourite",
+        f"{DEFAULT_API_BASE_URL}/contacts/is-favourite",
         json={"id": 1, "is_favourite": True},
         status=200,
     )
@@ -798,7 +848,7 @@ def test_tx_inner_transfer_uses_form_data(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.POST,
-        f"{DEFAULT_API_BASE_URL}/transactions/inner_transfer",
+        f"{DEFAULT_API_BASE_URL}/transactions/inner-transfer",
         json={"transaction_id": "tx-inner-1", "status": "Pending"},
         status=201,
     )
@@ -832,7 +882,7 @@ def test_user_spending_limit_calls_endpoint(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.GET,
-        f"{DEFAULT_API_BASE_URL}/users/spending_limit",
+        f"{DEFAULT_API_BASE_URL}/users/spending-limit",
         json={"kyc_tier": 1, "current_limit": 500, "spended": 123.45, "available": 376.55},
         status=200,
     )
@@ -929,7 +979,7 @@ def test_user_settings_get_calls_endpoint(runner, config_store):
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.GET,
-        f"{DEFAULT_API_BASE_URL}/users/user_settings",
+        f"{DEFAULT_API_BASE_URL}/users/user-settings",
         json={"language": "ES", "beta_version": True, "favorite_currency": "ARS"},
         status=200,
     )
@@ -946,7 +996,7 @@ def test_user_settings_update_supports_boolean_and_currency(runner, config_store
     config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
     responses.add(
         responses.PATCH,
-        f"{DEFAULT_API_BASE_URL}/users/user_settings",
+        f"{DEFAULT_API_BASE_URL}/users/user-settings",
         json={"message": "User settings updated successfully"},
         status=200,
     )
@@ -1062,3 +1112,202 @@ def test_preview_secret_handles_empty_short_and_long_values():
     assert _preview_secret(None) is None
     assert _preview_secret("short") == "short"
     assert _preview_secret("abcdefghijkl") == "abcd...ijkl"
+
+
+@responses.activate
+def test_tx_tentative_amount_includes_alias_when_provided(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/transactions/tentative-amount",
+        json={"usdt_amount": 6.99, "valid_cbu_alias": True},
+        status=200,
+    )
+
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "tx",
+            "tentative-amount",
+            "--amount",
+            "10000",
+            "--currency-payment",
+            "ARS",
+            "--currency-taken",
+            "USDT",
+            "--type",
+            "fiat_transfer",
+            "--alias",
+            "moni.uala",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {
+        "amount": 10000.0,
+        "currency_payment": "ARS",
+        "currency_taken": "USDT",
+        "type": "fiat_transfer",
+        "alias": "moni.uala",
+    }
+    assert json.loads(result.output)["valid_cbu_alias"] is True
+
+
+@responses.activate
+def test_tx_bank_account_resolves_query(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/transactions/bank-accounts/search/moni.uala",
+        json={"cvu": "3840200500000008458511", "alias": "moni.uala", "bank": "Ualá"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "tx", "bank-account", "moni.uala"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["bank"] == "Ualá"
+    assert responses.calls[0].request.body is None
+
+
+def test_tx_bank_account_requires_authentication(runner):
+    result = runner.invoke(cli, ["tx", "bank-account", "moni.uala"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_tx_bank_account_handles_not_found(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/transactions/bank-accounts/search/unknown.alias",
+        json={"error": "Bank account not found"},
+        status=404,
+    )
+
+    result = runner.invoke(cli, ["tx", "bank-account", "unknown.alias"])
+
+    assert result.exit_code == 2
+    assert "Bank account not found" in result.output
+
+
+@responses.activate
+def test_tx_direct_payment_get_fetches_tentative(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/transactions/direct-fiat/tentatives/tent-1",
+        json={"id": "tent-1", "status": "pending", "amount_ars": 5000},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "tx", "direct-payment", "get", "tent-1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["id"] == "tent-1"
+    assert payload["status"] == "pending"
+
+
+@responses.activate
+def test_user_b2b_create_posts_email(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/b2b",
+        json={"wapu_user_id": "sub-1", "email": "cliente@empresa.com"},
+        status=201,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "b2b", "create", "--email", "cliente@empresa.com"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["wapu_user_id"] == "sub-1"
+    assert json.loads(responses.calls[0].request.body.decode("utf-8")) == {"email": "cliente@empresa.com"}
+
+
+def test_user_b2b_create_requires_authentication(runner):
+    result = runner.invoke(cli, ["user", "b2b", "create", "--email", "cliente@empresa.com"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_user_b2b_token_create_mints_token(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/b2b/sub-1/api-token",
+        json={"token": "sk-sub-1", "wapu_user_id": "sub-1"},
+        status=201,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "b2b", "token", "create", "sub-1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["token"] == "sk-sub-1"
+    assert responses.calls[0].request.body.decode("utf-8") == "{}"
+
+
+@responses.activate
+def test_user_b2b_token_revoke_uses_delete(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.DELETE,
+        f"{DEFAULT_API_BASE_URL}/users/b2b/sub-1/api-token",
+        json={"message": "Token revoked"},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--output", "json", "user", "b2b", "token", "revoke", "sub-1"])
+
+    assert result.exit_code == 0
+    payload = json.loads(result.output)
+    assert payload["message"] == "Token revoked"
+
+
+def test_user_b2b_token_create_requires_authentication(runner):
+    result = runner.invoke(cli, ["user", "b2b", "token", "create", "sub-1"])
+
+    assert result.exit_code == 2
+    assert "No credentials configured" in result.output
+
+
+@responses.activate
+def test_wapu_user_id_option_sends_delegation_header(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/transactions/my-transactions",
+        json={"transactions": []},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["--wapu-user-id", "sub-user-1", "tx", "list"])
+
+    assert result.exit_code == 0
+    assert responses.calls[0].request.headers["X-Wapu-User-Id"] == "sub-user-1"
+
+
+@responses.activate
+def test_commands_omit_delegation_header_by_default(runner, config_store):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="key-123"))
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/transactions/my-transactions",
+        json={"transactions": []},
+        status=200,
+    )
+
+    result = runner.invoke(cli, ["tx", "list"])
+
+    assert result.exit_code == 0
+    assert "X-Wapu-User-Id" not in responses.calls[0].request.headers

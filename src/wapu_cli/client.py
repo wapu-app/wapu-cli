@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import requests
 
@@ -15,10 +16,17 @@ class AuthContext:
 
 
 class WapuClient:
-    def __init__(self, base_url: str, auth: AuthContext | None = None, timeout: int = 30) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        auth: AuthContext | None = None,
+        timeout: int = 30,
+        wapu_user_id: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth = auth or AuthContext()
         self.timeout = timeout
+        self.wapu_user_id = wapu_user_id
 
     def login(self, email: str, password: str) -> dict[str, Any]:
         return self._request("POST", "/users/login", json={"email": email, "password": password})
@@ -40,7 +48,7 @@ class WapuClient:
         return {"lightning_address": f"{username.strip().lower()}@wapu.app"}
 
     def create_lightning_deposit(self, amount: float, currency: str) -> dict[str, Any]:
-        return self._request("POST", "/wallet/deposit_lightning", json={"amount": amount, "currency": currency})
+        return self._request("POST", "/wallet/deposit-lightning", json={"amount": amount, "currency": currency})
 
     def create_crypto_deposit(self, *, amount: float, currency: str, network: str) -> dict[str, Any]:
         return self._request(
@@ -79,7 +87,7 @@ class WapuClient:
     def set_contact_favourite(self, *, contact_id: int, is_favourite: bool) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/contacts/is_favourite",
+            "/contacts/is-favourite",
             data={
                 "contact_id": str(contact_id),
                 "is_favourite": "true" if is_favourite else "false",
@@ -90,7 +98,7 @@ class WapuClient:
         return self._request("DELETE", f"/contacts/{contact_id}")
 
     def list_transactions(self) -> dict[str, Any]:
-        return self._request("GET", "/transactions/my_transactions")
+        return self._request("GET", "/transactions/my-transactions")
 
     def get_transaction(self, transaction_id: str) -> dict[str, Any]:
         return self._request("GET", f"/transactions/{transaction_id}")
@@ -105,22 +113,30 @@ class WapuClient:
         currency_payment: str,
         currency_taken: str,
         transaction_type: str,
+        alias: str | None = None,
     ) -> dict[str, Any]:
         return self._request(
             "POST",
             "/transactions/tentative-amount",
-            json={
-                "amount": amount,
-                "currency_payment": currency_payment,
-                "currency_taken": currency_taken,
-                "type": transaction_type,
-            },
+            json=self._compact_payload(
+                {
+                    "amount": amount,
+                    "currency_payment": currency_payment,
+                    "currency_taken": currency_taken,
+                    "type": transaction_type,
+                    "alias": alias,
+                }
+            ),
         )
+
+    def search_fiat_bank_account(self, query: str) -> dict[str, Any]:
+        encoded_query = quote(query, safe="")
+        return self._request("GET", f"/transactions/bank-accounts/search/{encoded_query}")
 
     def create_inner_transfer(self, *, amount: float, currency: str, receiver_username: str) -> dict[str, Any]:
         return self._request(
             "POST",
-            "/transactions/inner_transfer",
+            "/transactions/inner-transfer",
             data={
                 "amount": str(amount),
                 "currency": currency,
@@ -155,6 +171,8 @@ class WapuClient:
         receiver_name: str | None = None,
         funding_method: str,
         network: str,
+        external_reference: str | None = None,
+        refund_address: str | None = None,
     ) -> dict[str, Any]:
         return self._request(
             "POST",
@@ -167,9 +185,14 @@ class WapuClient:
                     "receiver_name": receiver_name,
                     "funding_method": funding_method,
                     "network": network,
+                    "external_reference": external_reference,
+                    "refund_address": refund_address,
                 }
             ),
         )
+
+    def get_direct_fiat_tentative(self, tentative_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/transactions/direct-fiat/tentatives/{tentative_id}")
 
     def issue_direct_fiat_tentative_funding(self, tentative_uuid: str) -> dict[str, Any]:
         return self._request(
@@ -178,8 +201,17 @@ class WapuClient:
             json={},
         )
 
+    def create_b2b_sub_user(self, email: str) -> dict[str, Any]:
+        return self._request("POST", "/users/b2b", json={"email": email})
+
+    def create_b2b_sub_user_api_token(self, user_uuid: str) -> dict[str, Any]:
+        return self._request("POST", f"/users/b2b/{quote(user_uuid, safe='')}/api-token", json={})
+
+    def revoke_b2b_sub_user_api_token(self, user_uuid: str) -> dict[str, Any]:
+        return self._request("DELETE", f"/users/b2b/{quote(user_uuid, safe='')}/api-token")
+
     def get_spending_limit(self) -> dict[str, Any]:
-        return self._request("GET", "/users/spending_limit")
+        return self._request("GET", "/users/spending-limit")
 
     def get_referral(self, *, email: str | None = None, phone: str | None = None) -> dict[str, Any]:
         payload = self._compact_payload({"email": email, "phone": phone})
@@ -213,7 +245,7 @@ class WapuClient:
         )
 
     def get_user_settings(self) -> dict[str, Any]:
-        return self._request("GET", "/users/user_settings")
+        return self._request("GET", "/users/user-settings")
 
     def update_user_settings(
         self,
@@ -224,7 +256,7 @@ class WapuClient:
     ) -> dict[str, Any]:
         return self._request(
             "PATCH",
-            "/users/user_settings",
+            "/users/user-settings",
             json=self._compact_payload(
                 {
                     "language": language,
@@ -242,6 +274,8 @@ class WapuClient:
             headers["Authorization"] = f"Bearer {self.auth.access_token}"
         elif self.auth.api_key:
             headers["X-API-Key"] = self.auth.api_key
+        if self.wapu_user_id:
+            headers["X-Wapu-User-Id"] = self.wapu_user_id
         return headers
 
     def _request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
