@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 import requests
 import responses
@@ -437,3 +439,16 @@ def test_request_sends_wapu_user_id_header_when_configured():
     client.get_home()
 
     assert responses.calls[0].request.headers["X-Wapu-User-Id"] == "sub-user-1"
+
+
+@responses.activate
+def test_create_api_token_sends_label_only_when_given():
+    responses.add(responses.POST, "https://api.example/users/api-token", json={"token": "t"}, status=201)
+    responses.add(responses.POST, "https://api.example/users/api-token", json={"token": "t"}, status=201)
+
+    client = WapuClient("https://api.example")
+    client.create_api_token()
+    client.create_api_token(label="wapu-cli")
+
+    assert responses.calls[0].request.body.decode("utf-8") == "{}"
+    assert json.loads(responses.calls[1].request.body) == {"label": "wapu-cli"}

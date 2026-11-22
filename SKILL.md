@@ -66,17 +66,19 @@ Usar sólo un selector de salida: `--output`, `--json` o `--yaml`.
 
 ## Autenticación
 
-Guardar una API key:
+Guardar una API key existente (no crea ninguna key nueva):
 
 ```bash
 wapu auth login --api-key "<api_key>"
 ```
 
-Login con email/password. Comportamiento actual del CLI: hace login, crea un API token y guarda esa API key localmente en vez de guardar el JWT:
+Login con email/password. Comportamiento actual del CLI: hace login, crea un API token nuevo con la etiqueta `wapu-cli` y guarda esa API key localmente en vez de guardar el JWT:
 
 ```bash
 wapu auth login --email "<email>" --password "<password>"
 ```
+
+Cada login con email/password crea una key NUEVA y ocupa uno de los 3 lugares de API keys activas de la cuenta (no rota la anterior). Si la cuenta ya tiene 3, el backend responde 409, el CLI muestra un mensaje claro y las credenciales guardadas quedan intactas. Resolver revocando una key en la app de WapuPay o reutilizando una existente con `wapu auth login --api-key "<api_key>"`. Para repetir logins (scripts, CI) preferir `--api-key` o `WAPU_API_KEY`.
 
 Inspeccionar estado local sin revelar el token completo:
 
@@ -90,7 +92,7 @@ Borrar credenciales locales:
 wapu auth logout
 ```
 
-Inspeccionar metadata del API token:
+Inspeccionar metadata del API token (incluye `keys` con las keys activas y `limit: 3`):
 
 ```bash
 wapu api-token status

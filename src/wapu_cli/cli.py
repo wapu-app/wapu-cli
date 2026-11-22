@@ -203,10 +203,19 @@ def auth_login(state: RuntimeState, email: str | None, password: str | None, api
     if not access_token:
         raise click.ClickException("Login succeeded but the backend did not return an access token.")
 
-    api_token_payload = WapuClient(
-        state.api_base_url,
-        auth=AuthContext(access_token=access_token),
-    ).create_api_token()
+    try:
+        api_token_payload = WapuClient(
+            state.api_base_url,
+            auth=AuthContext(access_token=access_token),
+        ).create_api_token(label="wapu-cli")
+    except WapuCLIError as exc:
+        if exc.status_code == 409:
+            raise WapuCLIError(
+                "Your account already has 3 active API keys (the maximum). Revoke one in the WapuPay app, "
+                "or run `wapu auth login --api-key <existing key>`.",
+                exit_code=exc.exit_code,
+            ) from exc
+        raise
     api_key = api_token_payload.get("token")
     if not api_key:
         raise click.ClickException("API token creation succeeded but the backend did not return a token.")

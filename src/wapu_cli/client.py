@@ -31,8 +31,8 @@ class WapuClient:
     def login(self, email: str, password: str) -> dict[str, Any]:
         return self._request("POST", "/users/login", json={"email": email, "password": password})
 
-    def create_api_token(self) -> dict[str, Any]:
-        return self._request("POST", "/users/api-token", json={})
+    def create_api_token(self, label: str | None = None) -> dict[str, Any]:
+        return self._request("POST", "/users/api-token", json=self._compact_payload({"label": label}))
 
     def get_home(self) -> dict[str, Any]:
         return self._request("GET", "/users/home")
@@ -319,4 +319,4 @@ class WapuClient:
             exit_code = 3
         elif response.status_code == 429:
             exit_code = 4
-        return WapuCLIError(message, exit_code=exit_code)
+        return WapuCLIError(message, exit_code=exit_code, status_code=response.status_code)
