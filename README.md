@@ -67,7 +67,7 @@ Variables soportadas:
 - `WAPU_ACCESS_TOKEN`
 - `WAPU_API_KEY`
 
-Backend de test por default:
+Backend por defecto:
 
 ```text
 https://be-prod.wapu.app
