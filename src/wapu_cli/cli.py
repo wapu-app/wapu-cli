@@ -6,7 +6,7 @@ from pathlib import Path
 import click
 
 from .client import AuthContext, WapuClient
-from .config import CONFIG_PATH, ConfigStore, resolve_runtime_config
+from .config import CONFIG_PATH, ConfigData, ConfigStore, resolve_runtime_config
 from .errors import WapuCLIError
 from .output import emit_output
 
@@ -168,6 +168,14 @@ def auth() -> None:
     """Manage local authentication."""
 
 
+def _saved_key_is_active(state: RuntimeState, config: ConfigData, access_token: str) -> bool:
+    """True when the saved config key is one of this account's active keys (same API base URL)."""
+    if not config.api_key or config.api_base_url != state.api_base_url:
+        return False
+    status = WapuClient(state.api_base_url, auth=AuthContext(access_token=access_token)).get_api_token_status()
+    return any(k.get("token_prefix") == config.api_key[:12] for k in status.get("keys") or [])
+
+
 @auth.command("login")
 @click.option("--email", help="Email used for JWT login.")
 @click.option("--password", help="Password used for JWT login.")
@@ -203,6 +211,23 @@ def auth_login(state: RuntimeState, email: str | None, password: str | None, api
     if not access_token:
         raise click.ClickException("Login succeeded but the backend did not return an access token.")
 
+    config = state.config_store.load()
+    if _saved_key_is_active(state, config, access_token):
+        config.auth_type = "api_key"
+        config.access_token = None
+        state.config_store.save(config)
+        print_payload(
+            state,
+            {
+                "message": "Existing API key reused",
+                "auth_type": "api_key",
+                "api_base_url": config.api_base_url,
+                "config_path": str(state.config_path),
+                "hint": "Run `wapu auth logout` first to store a new key.",
+            },
+        )
+        return
+
     try:
         api_token_payload = WapuClient(
             state.api_base_url,
@@ -220,7 +245,6 @@ def auth_login(state: RuntimeState, email: str | None, password: str | None, api
     if not api_key:
         raise click.ClickException("API token creation succeeded but the backend did not return a token.")
 
-    config = state.config_store.load()
     config.api_base_url = state.api_base_url
     config.auth_type = "api_key"
     config.access_token = None

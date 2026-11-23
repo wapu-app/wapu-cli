@@ -81,13 +81,13 @@ Guardar una API key existente (no crea ninguna key nueva):
 wapu auth login --api-key '...'
 ```
 
-Login con email y contraseña: crea una API key nueva con la etiqueta `wapu-cli` y la guarda localmente (no guarda el JWT):
+Login con email y contraseña: si la API key guardada sigue activa en la cuenta, la reutiliza; si no, crea una nueva con la etiqueta `wapu-cli` y la guarda localmente (no guarda el JWT):
 
 ```bash
 wapu auth login --email you@example.com --password '...'
 ```
 
-Cada login con email/contraseña crea una key nueva y ocupa uno de los 3 lugares de API keys activas de la cuenta. Si la cuenta ya tiene 3, el login falla con un mensaje claro (HTTP 409) y las credenciales guardadas no cambian: revocá una key en la app de WapuPay o reutilizá una existente con `--api-key`.
+Para guardar una key nueva, corré antes `wapu auth logout` (y revocá la anterior en la app de WapuPay si ya no la querés). Cada key nueva ocupa uno de los 3 lugares de API keys activas de la cuenta. Si la cuenta ya tiene 3, el login falla con un mensaje claro (HTTP 409) y las credenciales guardadas no cambian: revocá una key en la app de WapuPay o reutilizá una existente con `--api-key`.
 
 Ver estado local:
 
