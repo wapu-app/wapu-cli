@@ -36,6 +36,7 @@ def test_auth_login_with_user_password_creates_and_stores_api_key(runner, config
     assert data["access_token"] is None
     assert data["api_key"] == "api-token-abc123"
     assert responses.calls[1].request.headers["Authorization"] == "Bearer jwt-token-123456"
+    assert json.loads(responses.calls[1].request.body) == {"label": "wapu-cli"}
 
 
 def test_auth_login_with_api_key_stores_key(runner, config_path):
@@ -77,6 +78,101 @@ def test_auth_login_requires_access_token_in_login_response(runner):
 
     assert result.exit_code != 0
     assert "did not return an access token" in result.output
+
+
+@responses.activate
+@responses.activate
+def test_auth_login_explains_api_key_limit_and_keeps_stored_credential(runner, config_store, config_path):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key="old-key"))
+    before = config_path.read_text(encoding="utf-8")
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/login",
+        json={"access_token": "jwt-token-123456"},
+        status=200,
+    )
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/api-token/status",
+        json={"keys": [{"id": 1, "token_prefix": "other_prefix"}], "limit": 3},
+        status=200,
+    )
+    responses.add(
+        responses.POST,
+        f"{DEFAULT_API_BASE_URL}/users/api-token",
+        json={"error": "API key limit reached: revoke a key before creating another", "limit": 3},
+        status=409,
+    )
+
+    result = runner.invoke(cli, ["auth", "login", "--email", "user@example.com", "--password", "secret"])
+
+    assert result.exit_code != 0
+    assert "already has 3 active API keys" in result.output
+    assert "--api-key" in result.output
+    assert config_path.read_text(encoding="utf-8") == before
+
+
+SAVED_KEY = "wapu_savedkey_secret"
+
+
+def _login_mocks(keys, create=True):
+    responses.add(responses.POST, f"{DEFAULT_API_BASE_URL}/users/login", json={"access_token": "jwt-token-123456"}, status=200)
+    responses.add(
+        responses.GET,
+        f"{DEFAULT_API_BASE_URL}/users/api-token/status",
+        json={"keys": keys, "limit": 3},
+        status=200,
+    )
+    if create:
+        responses.add(responses.POST, f"{DEFAULT_API_BASE_URL}/users/api-token", json={"token": "new-key-123456789"}, status=201)
+
+
+def _login(runner):
+    return runner.invoke(cli, ["--output", "json", "auth", "login", "--email", "user@example.com", "--password", "secret"])
+
+
+def _created():
+    return [c for c in responses.calls if c.request.method == "POST" and c.request.url.endswith("/users/api-token")]
+
+
+@responses.activate
+def test_auth_login_reuses_saved_key_when_active(runner, config_store, config_path):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key=SAVED_KEY))
+    _login_mocks([{"id": 1, "label": "wapu-cli", "token_prefix": SAVED_KEY[:12]}])
+
+    result = _login(runner)
+
+    assert result.exit_code == 0
+    assert "Existing API key reused" in result.output
+    assert not _created()
+    assert read_config(config_path)["api_key"] == SAVED_KEY
+
+
+@responses.activate
+def test_auth_login_creates_key_when_saved_key_not_active(runner, config_store, config_path):
+    config_store.save(ConfigData(api_base_url=DEFAULT_API_BASE_URL, auth_type="api_key", api_key=SAVED_KEY))
+    _login_mocks([{"id": 2, "label": "other", "token_prefix": "other_prefix"}])
+
+    result = _login(runner)
+
+    assert result.exit_code == 0
+    assert len(_created()) == 1
+    assert read_config(config_path)["api_key"] == "new-key-123456789"
+
+
+@responses.activate
+def test_auth_login_creates_key_when_saved_key_has_other_base_url(runner, config_store, config_path):
+    config_store.save(ConfigData(api_base_url="https://other.example", auth_type="api_key", api_key=SAVED_KEY))
+    _login_mocks([{"id": 1, "label": "wapu-cli", "token_prefix": SAVED_KEY[:12]}])
+
+    result = runner.invoke(
+        cli,
+        ["--output", "json", "--api-base-url", DEFAULT_API_BASE_URL, "auth", "login", "--email", "user@example.com", "--password", "secret"],
+    )
+
+    assert result.exit_code == 0
+    assert len(_created()) == 1
+    assert read_config(config_path)["api_key"] == "new-key-123456789"
 
 
 @responses.activate
